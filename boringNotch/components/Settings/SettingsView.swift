@@ -147,6 +147,8 @@ struct GeneralSettings: View {
     @Default(.automaticallySwitchDisplay) var automaticallySwitchDisplay
     @Default(.enableGestures) var enableGestures
     @Default(.openNotchOnHover) var openNotchOnHover
+    @Default(.enableOpeningAnimation) var enableOpeningAnimation
+    @Default(.animationSpeedMultiplier) var animationSpeedMultiplier
     
 
     var body: some View {
@@ -324,6 +326,23 @@ struct GeneralSettings: View {
             Defaults.Toggle(key: .openNotchOnHover) {
                 Text("Open notch on hover")
             }
+            Defaults.Toggle(key: .enableOpeningAnimation) {
+                Text("Notch animation")
+            }
+            Slider(
+                value: $animationSpeedMultiplier,
+                in: StandardAnimations.minimumSpeed...StandardAnimations.maximumSpeed,
+                step: 0.05
+            ) {
+                HStack {
+                    Text("Animation speed")
+                    Spacer()
+                    Text("\(animationSpeedMultiplier, specifier: "%.2f")×")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(!enableOpeningAnimation)
             Defaults.Toggle(key: .enableHaptics) {
                     Text("Enable haptic feedback")
             }

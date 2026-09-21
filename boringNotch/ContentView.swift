@@ -33,8 +33,9 @@ struct ContentView: View {
 
     @Default(.showNotHumanFace) var showNotHumanFace
 
-    // Shared interactive spring for movement/resizing to avoid conflicting animations
-    private let animationSpring = Animation.interactiveSpring(response: 0.38, dampingFraction: 0.8, blendDuration: 0)
+    // Pointer-driven gesture feedback stays independent from configured
+    // open/close transition timing.
+    private let animationSpring = StandardAnimations.gestureInteractive
 
     private let extendedHoverPadding: CGFloat = 30
     private let zeroHeightHoverPadding: CGFloat = 10
@@ -116,11 +117,7 @@ struct ContentView: View {
                 mainLayout
                     .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
                     .conditionalModifier(true) { view in
-                        let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
-                        let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
-                        
                         return view
-                            .animation(vm.notchState == .open ? openAnimation : closeAnimation, value: vm.notchState)
                             .animation(.smooth, value: gestureProgress)
                     }
                     .contentShape(Rectangle())
@@ -147,9 +144,7 @@ struct ContentView: View {
                             try? await Task.sleep(for: .seconds(1))
                             await MainActor.run {
                                 if coordinator.firstLaunch {
-                                    withAnimation(vm.animation) {
-                                        doOpen()
-                                    }
+                                    doOpen()
                                 }
                             }
                         }
@@ -508,9 +503,7 @@ struct ContentView: View {
     }
 
     private func doOpen() {
-        withAnimation(animationSpring) {
-            vm.open()
-        }
+        vm.open()
     }
 
     // MARK: - Hover Management

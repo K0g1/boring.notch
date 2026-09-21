@@ -189,12 +189,18 @@ class BoringViewModel: NSObject, ObservableObject {
         return false
     }
 
-    func open() {
-        self.notchSize = openNotchSize
-        self.notchState = .open
+    @discardableResult
+    func open() -> Bool {
+        guard notchState != .open else { return false }
+
+        StandardAnimations.performOpening {
+            self.notchSize = openNotchSize
+            self.notchState = .open
+        }
         
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
+        return true
     }
 
     func close() {
@@ -202,28 +208,36 @@ class BoringViewModel: NSObject, ObservableObject {
         if SharingStateManager.shared.preventNotchClose {
             return
         }
-        self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)
-        self.closedNotchSize = self.notchSize
-        self.notchState = .closed
-        self.isBatteryPopoverActive = false
-        self.coordinator.sneakPeek.show = false
-        self.edgeAutoOpenActive = false
+        let wasOpen = notchState == .open
+        let updates = {
+            self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)
+            self.closedNotchSize = self.notchSize
+            self.notchState = .closed
+            self.isBatteryPopoverActive = false
+            self.coordinator.sneakPeek.show = false
+            self.edgeAutoOpenActive = false
 
-        // Set the current view to shelf if it contains files and the user enables openShelfByDefault
-        // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
-    if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
-            coordinator.currentView = .shelf
-        } else if !coordinator.openLastTabByDefault {
-            coordinator.currentView = .home
+            // Set the current view to shelf if it contains files and the user enables openShelfByDefault
+            // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
+            if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
+                self.coordinator.currentView = .shelf
+            } else if !self.coordinator.openLastTabByDefault {
+                self.coordinator.currentView = .home
+            }
+        }
+        if wasOpen {
+            StandardAnimations.performClosing(updates)
+        } else {
+            updates()
         }
     }
 
     func closeHello() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [weak self] in
-            self?.coordinator.firstLaunch = false
             withAnimation(self?.animationLibrary.animation) {
-                self?.close()
+                self?.coordinator.firstLaunch = false
             }
+            self?.close()
         }
     }
 }
