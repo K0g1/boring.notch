@@ -1,0 +1,29 @@
+Process:         boringNotch [19817]
+Path:            /private/var/folders/*/BoringNotch-Optimized.app/Contents/MacOS/boringNotch
+Load Address:    0x104d50000
+Identifier:      com.k0g1.boringnotch.optimized
+Version:         2.7.3 (27301)
+Code Type:       ARM64
+Platform:        macOS
+Parent Process:  launchd [1]
+Target Type:     live task
+
+Date/Time:       2026-09-20 21:14:27.489 -0700
+Launch Time:     2026-09-20 21:14:11.903 -0700
+OS Version:      macOS 15.7.3 (24G419)
+Report Version:  7
+Analysis Tool:   /Applications/Xcode.app/Contents/Developer/usr/bin/leaks
+Analysis Tool Version:  Xcode 16.4 (16F6)
+
+Physical footprint:         20.5M
+Physical footprint (peak):  20.6M
+Idle exit:                  untracked
+----
+
+leaks Report Version: 4.0
+Process 19817: 37865 nodes malloced for 7375 KB
+Process 19817: 2 leaks for 368 total leaked bytes.
+
+    2 (368 bytes) ROOT LEAK: 0x1370e7ed0 [96]
+       1 (272 bytes) 0x1370e8350 [272]
+

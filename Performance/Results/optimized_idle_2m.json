@@ -1,0 +1,112 @@
+{
+  "capturedAt": "2026-09-21T04:13:05.512003+00:00",
+  "childProcessesPeak": 1,
+  "commit": "81b686358c19385d104c18df50fee262c84c0ed7",
+  "cpuAveragePercent": 0.8153846153846154,
+  "notes": "CPU is sampled from macOS ps %cpu; physical footprint is the final vmmap summary.",
+  "physicalFootprintMB": 20.5,
+  "physicalFootprintPeakMB": 20.8,
+  "requestedDurationSeconds": 120,
+  "rssAverageMB": 53.53605769230769,
+  "rssFirstMB": 41.09375,
+  "rssGrowthMB": 13.390625,
+  "rssLastMB": 54.484375,
+  "sampleCount": 13,
+  "sampleIntervalSeconds": 10,
+  "samples": [
+    {
+      "childProcesses": 0,
+      "cpuPercent": 10.1,
+      "elapsedSeconds": 0,
+      "rssMB": 41.09375,
+      "threads": 5
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 10,
+      "rssMB": 57.109375,
+      "threads": 6
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 20,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 30,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 40,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 50,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 60,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 70,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 80,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 90,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 100,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.0,
+      "elapsedSeconds": 110,
+      "rssMB": 54.328125,
+      "threads": 7
+    },
+    {
+      "childProcesses": 1,
+      "cpuPercent": 0.5,
+      "elapsedSeconds": 120,
+      "rssMB": 54.484375,
+      "threads": 7
+    }
+  ],
+  "scenario": "optimized_idle_2m",
+  "schemaVersion": 1,
+  "threadsPeak": 7
+}

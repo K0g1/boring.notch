@@ -10,6 +10,7 @@ CLEAN_APP="$STAGING_DIR/BoringNotch-Optimized.app"
 OUTPUT_APP="$DIST_DIR/BoringNotch-Optimized.app"
 OUTPUT_DMG="$DIST_DIR/BoringNotch-Optimized.dmg"
 OUTPUT_ZIP="$DIST_DIR/BoringNotch-Optimized.app.zip"
+RELEASE_REPORTS=(BUILD_INFO.md PERFORMANCE_REPORT.md UPSTREAM_DEVIATIONS.md)
 SIGNING_IDENTITY="${BORING_NOTCH_SIGNING_IDENTITY:-}"
 SIGNING_TEAM="${BORING_NOTCH_SIGNING_TEAM:-}"
 
@@ -110,11 +111,20 @@ rm -rf -- "$OUTPUT_APP"
 xattr -cr "$OUTPUT_APP"
 codesign --verify --deep --strict --verbose=2 "$OUTPUT_APP"
 
+for report in "${RELEASE_REPORTS[@]}"; do
+  [[ -f "$ROOT_DIR/$report" ]] || {
+    echo "Missing required release report: $ROOT_DIR/$report" >&2
+    exit 1
+  }
+  /usr/bin/ditto "$ROOT_DIR/$report" "$DIST_DIR/$report"
+done
+
 (
   cd "$DIST_DIR"
   shasum -a 256 BoringNotch-Optimized.app/Contents/MacOS/boringNotch \
     BoringNotch-Optimized.app.zip \
-    BoringNotch-Optimized.dmg > SHA256SUMS.txt
+    BoringNotch-Optimized.dmg \
+    "${RELEASE_REPORTS[@]}" > SHA256SUMS.txt
   shasum -a 256 -c SHA256SUMS.txt
 )
 
@@ -123,5 +133,8 @@ echo "  $OUTPUT_APP"
 echo "  $OUTPUT_ZIP"
 echo "  $OUTPUT_DMG"
 echo "  $DIST_DIR/SHA256SUMS.txt"
+for report in "${RELEASE_REPORTS[@]}"; do
+  echo "  $DIST_DIR/$report"
+done
 echo "Clean staging app retained at:"
 echo "  $CLEAN_APP"

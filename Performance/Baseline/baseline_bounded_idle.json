@@ -1,0 +1,20 @@
+{
+  "capturedAt": "2026-09-21T02:53:41Z",
+  "childProcessesPeak": 1,
+  "commit": "16b0f11f51c79d42e27c10d77fd9e53c11410fdb",
+  "cpuAveragePercent": 0.925,
+  "notes": "Four ps samples at 15-second spacing from the isolated v2.7.3 Release process near 1:53 after launch. The negative RSS growth reflects a memory purge during this bounded observation, not a long-idle trend.",
+  "observedProcessAgeSeconds": 113,
+  "physicalFootprintMB": 249.9,
+  "physicalFootprintPeakMB": 287.5,
+  "requestedDurationSeconds": 45,
+  "rssAverageMB": 178.3828125,
+  "rssFirstMB": 199.6875,
+  "rssGrowthMB": -42.640625,
+  "rssLastMB": 157.046875,
+  "sampleCount": 4,
+  "sampleIntervalSeconds": 15,
+  "scenario": "baseline_bounded_idle",
+  "schemaVersion": 1,
+  "threadsPeak": 6
+}
