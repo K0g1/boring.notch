@@ -3,6 +3,26 @@ import XCTest
 @testable import boringNotch
 
 final class LifecycleAndCacheTests: XCTestCase {
+    @MainActor
+    func testBlinkControllerRemainsBoundedAcrossOneThousandCycles() {
+        let controller = BlinkTaskController()
+        var isBlinking = false
+
+        for _ in 0..<1_000 {
+            XCTAssertTrue(
+                controller.start(interval: .seconds(60)) { isBlinking = $0 }
+            )
+            XCTAssertFalse(
+                controller.start(interval: .seconds(60)) { isBlinking = $0 },
+                "A visible face must own at most one blink task"
+            )
+            XCTAssertTrue(controller.isRunning)
+            controller.stop { isBlinking = $0 }
+            XCTAssertFalse(controller.isRunning)
+            XCTAssertFalse(isBlinking)
+        }
+    }
+
     func testThumbnailLimiterNeverExceedsConfiguredConcurrency() async {
         let limiter = ThumbnailGenerationLimiter(limit: 4)
         let counter = ConcurrencyCounter()

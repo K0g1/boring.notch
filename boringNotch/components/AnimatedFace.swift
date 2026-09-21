@@ -6,10 +6,65 @@
 
 import SwiftUI
 
+@MainActor
+final class BlinkTaskController {
+    private var task: Task<Void, Never>?
+    private var generation: UUID?
+
+    var isRunning: Bool { task != nil }
+
+    @discardableResult
+    func start(
+        interval: Duration = .seconds(3),
+        blinkDuration: Duration = .milliseconds(100),
+        update: @escaping @MainActor (Bool) -> Void
+    ) -> Bool {
+        guard task == nil else { return false }
+
+        let currentGeneration = UUID()
+        generation = currentGeneration
+        task = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: interval)
+                } catch {
+                    break
+                }
+                guard self?.generation == currentGeneration else { break }
+                update(true)
+
+                do {
+                    try await Task.sleep(for: blinkDuration)
+                } catch {
+                    break
+                }
+                guard self?.generation == currentGeneration else { break }
+                update(false)
+            }
+
+            guard let self, generation == currentGeneration else { return }
+            update(false)
+            task = nil
+            generation = nil
+        }
+        return true
+    }
+
+    func stop(update: @escaping @MainActor (Bool) -> Void) {
+        generation = nil
+        task?.cancel()
+        task = nil
+        update(false)
+    }
+
+    deinit {
+        task?.cancel()
+    }
+}
+
 struct MinimalFaceFeatures: View {
     @State private var isBlinking = false
-    @State private var blinkTask: Task<Void, Never>?
-    @State private var blinkGeneration: UUID?
+    @State private var blinkController = BlinkTaskController()
     @State var height:CGFloat = 20;
     @State var width:CGFloat = 30;
     
@@ -51,47 +106,15 @@ struct MinimalFaceFeatures: View {
     }
     
     func startBlinking() {
-        guard blinkTask == nil else { return }
-        let generation = UUID()
-        blinkGeneration = generation
-
-        blinkTask = Task { @MainActor in
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .seconds(3))
-                } catch {
-                    break
-                }
-                guard blinkGeneration == generation else { break }
-
-                withAnimation(.spring(duration: 0.2)) {
-                    isBlinking = true
-                }
-
-                do {
-                    try await Task.sleep(for: .milliseconds(100))
-                } catch {
-                    break
-                }
-                guard blinkGeneration == generation else { break }
-
-                withAnimation(.spring(duration: 0.2)) {
-                    isBlinking = false
-                }
+        blinkController.start { blinking in
+            withAnimation(.spring(duration: 0.2)) {
+                isBlinking = blinking
             }
-
-            guard blinkGeneration == generation else { return }
-            isBlinking = false
-            blinkTask = nil
-            blinkGeneration = nil
         }
     }
 
     func stopBlinking() {
-        blinkGeneration = nil
-        blinkTask?.cancel()
-        blinkTask = nil
-        if isBlinking {
+        blinkController.stop { _ in
             isBlinking = false
         }
     }
