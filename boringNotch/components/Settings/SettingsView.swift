@@ -1800,6 +1800,7 @@ struct AccentCircleButton: View {
 struct Shortcuts: View {
     var body: some View {
         Form {
+            ShortcutFavoritesSettings()
             Section {
                 KeyboardShortcuts.Recorder("Toggle Sneak Peek:", name: .toggleSneakPeek)
             } header: {

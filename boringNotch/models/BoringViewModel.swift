@@ -36,6 +36,7 @@ class BoringViewModel: NSObject, ObservableObject {
 
     @Published var notchSize: CGSize = getClosedNotchSize()
     @Published var closedNotchSize: CGSize = getClosedNotchSize()
+    private var shortcutFavoritesHeight: CGFloat = 0
     
     @Published var isCameraExpanded: Bool = false
     @Published var isRequestingAuthorization: Bool = false
@@ -195,12 +196,20 @@ class BoringViewModel: NSObject, ObservableObject {
 
         StandardAnimations.performOpening {
             self.notchSize = openNotchSize
+            self.notchSize.height += self.shortcutFavoritesHeight
             self.notchState = .open
         }
         
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
         return true
+    }
+
+    func setShortcutFavoritesRowVisible(_ visible: Bool) {
+        shortcutFavoritesHeight = visible ? shortcutFavoritesRowHeight : 0
+        if notchState == .open {
+            notchSize.height = openNotchSize.height + shortcutFavoritesHeight
+        }
     }
 
     func close() {

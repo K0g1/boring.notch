@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D62000000000000000000001 /* ShortcutFavoritesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61000000000000000000001 /* ShortcutFavoritesStore.swift */; };
+		D62000000000000000000002 /* ShortcutFavoritesSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61000000000000000000002 /* ShortcutFavoritesSettings.swift */; };
+		D62000000000000000000003 /* ShortcutFavoritesRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61000000000000000000003 /* ShortcutFavoritesRow.swift */; };
 		A20000000000000000000001 /* TaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* TaskItem.swift */; };
 		A20000000000000000000002 /* AppleRemindersProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* AppleRemindersProvider.swift */; };
 		A20000000000000000000003 /* TodoistProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* TodoistProvider.swift */; };
@@ -190,6 +193,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		D61000000000000000000001 /* ShortcutFavoritesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutFavoritesStore.swift; sourceTree = "<group>"; };
+		D61000000000000000000002 /* ShortcutFavoritesSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutFavoritesSettings.swift; sourceTree = "<group>"; };
+		D61000000000000000000003 /* ShortcutFavoritesRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutFavoritesRow.swift; sourceTree = "<group>"; };
 		A5167212301F85B40018095A /* boringNotchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = boringNotchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000001 /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
 		A10000000000000000000002 /* AppleRemindersProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleRemindersProvider.swift; sourceTree = "<group>"; };
@@ -532,6 +538,7 @@
 		147163B52C5D804B0068B555 /* managers */ = {
 			isa = PBXGroup;
 			children = (
+				D61000000000000000000001 /* ShortcutFavoritesStore.swift */,
 				A10000000000000000000004 /* TaskStore.swift */,
 				11D58EA12E760AE100FA8377 /* ImageService.swift */,
 				F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */,
@@ -739,6 +746,7 @@
 		B186542F2C6F455E000B926A /* Notch */ = {
 			isa = PBXGroup;
 			children = (
+				D61000000000000000000003 /* ShortcutFavoritesRow.swift */,
 				1194E8862EA6DDA7009C82D6 /* BoringNotchSkyLightWindow.swift */,
 				1160F8D72DD98230006FBB94 /* NotchShape.swift */,
 				9AB0C6BB2C73C9CB00F7CD30 /* NotchHomeView.swift */,
@@ -752,6 +760,7 @@
 		B18654302C6F4590000B926A /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				D61000000000000000000002 /* ShortcutFavoritesSettings.swift */,
 				11F748832ECB27DC00F841DB /* MusicSlotConfigurationView.swift */,
 				11C5E3152DFE88510065821E /* SettingsView.swift */,
 				11C5E3112DFE85970065821E /* SettingsWindowController.swift */,
@@ -976,6 +985,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D62000000000000000000001 /* ShortcutFavoritesStore.swift in Sources */,
+				D62000000000000000000002 /* ShortcutFavoritesSettings.swift in Sources */,
+				D62000000000000000000003 /* ShortcutFavoritesRow.swift in Sources */,
 				A20000000000000000000001 /* TaskItem.swift in Sources */,
 				A20000000000000000000002 /* AppleRemindersProvider.swift in Sources */,
 				A20000000000000000000003 /* TodoistProvider.swift in Sources */,

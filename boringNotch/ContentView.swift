@@ -18,6 +18,8 @@ struct ContentView: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
+    @ObservedObject private var shortcutFavorites = ShortcutFavoritesStore.shared
+    @AppStorage("showShortcutFavorites") private var showShortcutFavorites = true
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -38,6 +40,11 @@ struct ContentView: View {
 
     private let extendedHoverPadding: CGFloat = 30
     private let zeroHeightHoverPadding: CGFloat = 10
+
+    private var hasShortcutFavoritesRow: Bool {
+        showShortcutFavorites && !shortcutFavorites.favorites.isEmpty
+            && coordinator.currentView == .home && !coordinator.firstLaunch
+    }
 
     private var topCornerRadius: CGFloat {
        ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
@@ -213,6 +220,9 @@ struct ContentView: View {
         .animation(.smooth, value: gestureProgress)
         .background(dragDetector)
         .environmentObject(vm)
+        .onChange(of: hasShortcutFavoritesRow, initial: true) { _, visible in
+            vm.setShortcutFavoritesRowVisible(visible)
+        }
         .onChange(of: vm.anyDropZoneTargeting) { _, isTargeted in
             anyDropDebounceTask?.cancel()
 

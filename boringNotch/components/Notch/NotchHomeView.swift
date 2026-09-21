@@ -477,7 +477,10 @@ struct NotchHomeView: View {
     var body: some View {
         Group {
             if !coordinator.firstLaunch {
-                mainContent
+                VStack(spacing: 6) {
+                    mainContent
+                    ShortcutFavoritesRow()
+                }
             }
         }
         // simplified: use a straightforward opacity transition
