@@ -22,6 +22,11 @@ protocol MediaControllerProtocol: AnyObject, ObservableObject {
     /// Stops every subscription, task, timer, pipe and child process owned by
     /// the controller. Once this returns, the controller must be quiescent.
     func stop() async
+
+    /// Performs the non-suspending portion of shutdown. This is called from
+    /// `applicationWillTerminate`, where an asynchronous task is not
+    /// guaranteed another scheduling opportunity before the process exits.
+    func stopImmediately()
     
     func setFavorite(_ favorite: Bool) async
     func play() async
@@ -35,4 +40,8 @@ protocol MediaControllerProtocol: AnyObject, ObservableObject {
     func setVolume(_ level: Double) async
     func isActive() -> Bool
     func updatePlaybackInfo() async
+}
+
+extension MediaControllerProtocol {
+    func stopImmediately() {}
 }

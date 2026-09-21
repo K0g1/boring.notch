@@ -72,6 +72,14 @@ class MusicManager: ObservableObject {
 
     // MARK: - Initialization
     init() {
+        // Xcode's application-hosted unit tests launch the app target. Do not
+        // start a system-wide MediaRemote stream merely to host XCTest; the
+        // tests that need controllers instantiate their own bounded fixtures.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            isDestroyed = true
+            return
+        }
+
         // Listen for changes to the default controller preference
         NotificationCenter.default.publisher(for: Notification.Name.mediaControllerChanged)
             .sink { [weak self] _ in
@@ -110,11 +118,12 @@ class MusicManager: ObservableObject {
 
         let previousLifecycleTask = controllerLifecycleTask
         previousLifecycleTask?.cancel()
+        let controller = activeController
+        controller?.stopImmediately()
         controllerLifecycleTask = Task { @MainActor [weak self] in
             await previousLifecycleTask?.value
             guard let self else { return }
             self.controllerCancellables.removeAll()
-            let controller = self.activeController
             self.activeController = nil
             await controller?.stop()
         }

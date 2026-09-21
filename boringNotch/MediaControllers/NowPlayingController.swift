@@ -99,8 +99,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     }
 
     deinit {
-        streamTask?.cancel()
-        favoriteStateTask?.cancel()
+        stopImmediately()
         
         if let pipeHandler = self.pipeHandler {
             Task { await pipeHandler.close()
@@ -149,6 +148,20 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         pipeHandler = nil
         await currentPipeHandler?.close()
         await currentTask?.value
+    }
+
+    func stopImmediately() {
+        isStarted = false
+        favoriteStateTask?.cancel()
+        streamTask?.cancel()
+
+        // Process termination is a synchronous signal delivery. Do this
+        // before the application exits so the adapter cannot be re-parented
+        // and left running after the app is gone. The regular async `stop()`
+        // path still waits for exit and closes the pipe when time permits.
+        if let process, process.isRunning {
+            process.terminate()
+        }
     }
 
     func play() async {
