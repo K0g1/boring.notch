@@ -28,6 +28,8 @@ DerivedData/
 
 # Build output
 build/
+dist/
+Release/
 *.app
 *.dSYM
 
