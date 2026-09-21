@@ -122,16 +122,23 @@ protocol TodoistClientProtocol: Sendable {
 }
 
 actor TodoistClient: TodoistClientProtocol {
+    typealias Sleep = @Sendable (Duration) async throws -> Void
+
     private let baseURL: URL
     private let session: URLSession
     private let decoder: JSONDecoder
-    private let maximumRateLimitRetries = 2
+    private let maximumRateLimitRetries: Int
+    private let sleep: Sleep
 
     init(
         baseURL: URL = URL(string: "https://api.todoist.com/api/v1")!,
-        session: URLSession? = nil
+        session: URLSession? = nil,
+        maximumRateLimitRetries: Int = 2,
+        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
     ) {
         self.baseURL = baseURL
+        self.maximumRateLimitRetries = max(0, maximumRateLimitRetries)
+        self.sleep = sleep
         if let session {
             self.session = session
         } else {
@@ -208,7 +215,7 @@ actor TodoistClient: TodoistClientProtocol {
                     30,
                     max(1, TimeInterval(response.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 1)
                 )
-                try await Task.sleep(for: .seconds(retryAfter))
+                try await sleep(.seconds(retryAfter))
             case 429:
                 throw TodoistClientError.rateLimited
             default:
@@ -364,6 +371,7 @@ actor TodoistProvider: TaskProvider {
     private var syncToken: String?
     private var lastSync: Date?
     private var didLoadCache = false
+    private var refreshTask: Task<Void, Error>?
     private let staleAfter: TimeInterval = 60
     private let fractionalISOFormatter: ISO8601DateFormatter
     private let isoFormatter: ISO8601DateFormatter
@@ -423,6 +431,8 @@ actor TodoistProvider: TaskProvider {
     }
 
     func disconnect() throws {
+        refreshTask?.cancel()
+        refreshTask = nil
         try credentials.deleteToken()
         resetLocalState()
         didLoadCache = true
@@ -447,9 +457,26 @@ actor TodoistProvider: TaskProvider {
             return
         }
 
-        let response = try await client.sync(token: token, syncToken: syncToken ?? "*")
-        apply(response)
-        persistCache()
+        if let refreshTask {
+            try await refreshTask.value
+            return
+        }
+
+        let currentSyncToken = syncToken ?? "*"
+        let task = Task { [client] in
+            let response = try await client.sync(token: token, syncToken: currentSyncToken)
+            try Task.checkCancellation()
+            self.apply(response)
+            self.persistCache()
+        }
+        refreshTask = task
+        do {
+            try await task.value
+            refreshTask = nil
+        } catch {
+            refreshTask = nil
+            throw error
+        }
     }
 
     func cachedTasks() -> [TaskItem] {

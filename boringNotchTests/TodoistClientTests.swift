@@ -148,6 +148,76 @@ final class TodoistClientTests: XCTestCase {
             // Expected typed authentication failure.
         }
     }
+
+    func testForbiddenResponseBecomesInvalidToken() async throws {
+        URLProtocolStub.setHandler { _ in
+            .init(statusCode: 403, headers: [:], data: Data())
+        }
+        let client = makeClient()
+
+        do {
+            _ = try await client.sync(token: "rejected", syncToken: "*")
+            XCTFail("Expected invalid-token error")
+        } catch TodoistClientError.invalidToken {
+            // Expected typed authentication failure.
+        }
+    }
+
+    func testMalformedJSONBecomesInvalidResponse() async throws {
+        URLProtocolStub.setHandler { _ in
+            .init(statusCode: 200, headers: [:], data: Data("not-json".utf8))
+        }
+        let client = makeClient()
+
+        do {
+            _ = try await client.sync(token: "token", syncToken: "*")
+            XCTFail("Expected invalid-response error")
+        } catch TodoistClientError.invalidResponse {
+            // Expected decoding failure.
+        }
+    }
+
+    func testServerAndNotFoundStatusesRemainTyped() async throws {
+        let statuses = LockedStatusQueue([404, 500])
+        URLProtocolStub.setHandler { _ in
+            .init(statusCode: statuses.removeFirst(), headers: [:], data: Data())
+        }
+        let client = makeClient()
+
+        for expected in [404, 500] {
+            do {
+                _ = try await client.sync(token: "token", syncToken: "*")
+                XCTFail("Expected HTTP status error")
+            } catch TodoistClientError.httpStatus(let actual) {
+                XCTAssertEqual(actual, expected)
+            }
+        }
+    }
+
+    func testRateLimitStopsAfterConfiguredRetryBudget() async throws {
+        URLProtocolStub.setHandler { _ in
+            .init(statusCode: 429, headers: ["Retry-After": "60"], data: Data())
+        }
+        let client = TodoistClient(
+            baseURL: URL(string: "https://todoist.test/api/v1")!,
+            session: session,
+            maximumRateLimitRetries: 0
+        )
+
+        do {
+            _ = try await client.sync(token: "token", syncToken: "*")
+            XCTFail("Expected rate-limit error")
+        } catch TodoistClientError.rateLimited {
+            // The test configuration intentionally disables retries.
+        }
+    }
+
+    private func makeClient() -> TodoistClient {
+        TodoistClient(
+            baseURL: URL(string: "https://todoist.test/api/v1")!,
+            session: session
+        )
+    }
 }
 
 private func requestBodyData(_ request: URLRequest) -> Data? {
@@ -185,5 +255,18 @@ private final class LockedRequestsBox: @unchecked Sendable {
 
     func append(_ request: URLRequest) {
         lock.withLock { storage.append(request) }
+    }
+}
+
+private final class LockedStatusQueue: @unchecked Sendable {
+    private let lock = NSLock()
+    private var statuses: [Int]
+
+    init(_ statuses: [Int]) {
+        self.statuses = statuses
+    }
+
+    func removeFirst() -> Int {
+        lock.withLock { statuses.removeFirst() }
     }
 }

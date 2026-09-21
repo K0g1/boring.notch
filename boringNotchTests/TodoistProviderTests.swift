@@ -195,4 +195,27 @@ final class TodoistProviderTests: XCTestCase {
         let cachedTasks = await offlineProvider.cachedTasks()
         XCTAssertEqual(cachedTasks.first?.title, "Cached")
     }
+
+    func testConcurrentRefreshesCoalesceIntoOneIncrementalRequest() async throws {
+        let response = try todoistResponse(
+            #"{"sync_token":"next","full_sync":false,"projects":[],"sections":[],"items":[]}"#
+        )
+        let client = MockTodoistClient(
+            responses: [.success(response)],
+            delay: .milliseconds(50)
+        )
+        let provider = TodoistProvider(
+            client: client,
+            credentials: FakeCredentialStore(token: "token"),
+            cacheURL: temporaryTestURL()
+        )
+
+        async let first: Void = provider.refresh(force: true)
+        async let second: Void = provider.refresh(force: true)
+        async let third: Void = provider.refresh(force: true)
+        _ = try await (first, second, third)
+
+        let syncCallCount = await client.syncCalls.count
+        XCTAssertEqual(syncCallCount, 1)
+    }
 }

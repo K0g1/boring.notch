@@ -40,15 +40,23 @@ actor MockTodoistClient: TodoistClientProtocol {
     }
 
     private var responses: [Result<TodoistSyncResponse, Error>]
+    private let delay: Duration?
     private(set) var syncCalls: [SyncCall] = []
     private(set) var completionCalls: [CompletionCall] = []
 
-    init(responses: [Result<TodoistSyncResponse, Error>]) {
+    init(
+        responses: [Result<TodoistSyncResponse, Error>],
+        delay: Duration? = nil
+    ) {
         self.responses = responses
+        self.delay = delay
     }
 
     func sync(token: String, syncToken: String) async throws -> TodoistSyncResponse {
         syncCalls.append(SyncCall(token: token, syncToken: syncToken))
+        if let delay {
+            try await Task.sleep(for: delay)
+        }
         guard !responses.isEmpty else { throw TestError.noResponse }
         return try responses.removeFirst().get()
     }
