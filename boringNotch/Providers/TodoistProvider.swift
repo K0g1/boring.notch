@@ -32,7 +32,7 @@ struct TodoistKeychainStore: TodoistCredentialStoring {
     private let service: String
     private let account = "personal-api-token"
 
-    init(bundleIdentifier: String = Bundle.main.bundleIdentifier ?? "theboringteam.boringnotch") {
+    init(bundleIdentifier: String = Bundle.main.bundleIdentifier ?? "com.k0g1.boringnotch.optimized") {
         service = "\(bundleIdentifier).todoist-api-token"
     }
 

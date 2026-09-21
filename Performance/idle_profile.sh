@@ -36,6 +36,11 @@ cleanup() {
   if [[ -n "$APP_PID" ]]; then
     pkill -P "$APP_PID" >/dev/null 2>&1 || true
     kill "$APP_PID" >/dev/null 2>&1 || true
+    for _ in {1..20}; do
+      kill -0 "$APP_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -KILL "$APP_PID" >/dev/null 2>&1 || true
   fi
   rm -f "$SAMPLES_FILE"
 }
@@ -55,6 +60,24 @@ done
 
 [[ -n "$APP_PID" ]] || { echo "Unable to identify the launched process" >&2; exit 1; }
 
+# A one-thread, low-RSS process is still inside sandbox/bootstrap setup and is
+# not a running application. Refuse to record that state as an idle profile.
+READY=0
+for _ in {1..60}; do
+  kill -0 "$APP_PID" 2>/dev/null || break
+  READY_RSS="$(ps -p "$APP_PID" -o rss= | awk '{$1=$1; print}')"
+  READY_THREADS="$(ps -M "$APP_PID" | tail -n +2 | wc -l | awk '{$1=$1; print}')"
+  if [[ "${READY_RSS:-0}" -ge 10240 && "${READY_THREADS:-0}" -ge 2 ]]; then
+    READY=1
+    break
+  fi
+  sleep 0.25
+done
+[[ "$READY" -eq 1 ]] || {
+  echo "Application did not finish initialization (pid=$APP_PID rssKB=${READY_RSS:-0} threads=${READY_THREADS:-0})" >&2
+  exit 1
+}
+
 START_EPOCH="$(date +%s)"
 while kill -0 "$APP_PID" 2>/dev/null; do
   NOW_EPOCH="$(date +%s)"
@@ -70,8 +93,8 @@ done
 
 kill -0 "$APP_PID" 2>/dev/null || { echo "Application exited during profiling" >&2; exit 1; }
 VM_SUMMARY="$(vmmap -summary "$APP_PID" 2>/dev/null || true)"
-PHYSICAL_MB="$(awk '/Physical footprint:/ {gsub(/[^0-9.]/, "", $3); print $3; exit}' <<< "$VM_SUMMARY")"
-PEAK_MB="$(awk '/Physical footprint \(peak\):/ {gsub(/[^0-9.]/, "", $4); print $4; exit}' <<< "$VM_SUMMARY")"
+PHYSICAL_MB="$(awk '/Physical footprint:/ {print $3; exit}' <<< "$VM_SUMMARY")"
+PEAK_MB="$(awk '/Physical footprint \(peak\):/ {print $4; exit}' <<< "$VM_SUMMARY")"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
 
 python3 - "$SAMPLES_FILE" "$OUTPUT" "$COMMIT" "$SCENARIO" "$DURATION" "$INTERVAL" "${PHYSICAL_MB:-null}" "${PEAK_MB:-null}" <<'PY'
@@ -93,8 +116,15 @@ with open(samples_path, encoding="utf-8") as handle:
             "childProcesses": int(children),
         })
 
-def number(value):
-    return None if value == "null" else float(value)
+def megabytes(value):
+    if value == "null":
+        return None
+    value = value.strip()
+    units = {"K": 1 / 1024, "M": 1, "G": 1024, "T": 1024 * 1024}
+    suffix = value[-1].upper()
+    if suffix in units:
+        return float(value[:-1]) * units[suffix]
+    return float(value)
 
 result = {
     "schemaVersion": 1,
@@ -104,8 +134,8 @@ result = {
     "requestedDurationSeconds": int(duration),
     "sampleIntervalSeconds": int(interval),
     "sampleCount": len(rows),
-    "physicalFootprintMB": number(physical),
-    "physicalFootprintPeakMB": number(peak),
+    "physicalFootprintMB": megabytes(physical),
+    "physicalFootprintPeakMB": megabytes(peak),
     "cpuAveragePercent": statistics.fmean(row["cpuPercent"] for row in rows),
     "rssAverageMB": statistics.fmean(row["rssMB"] for row in rows),
     "rssFirstMB": rows[0]["rssMB"],

@@ -373,8 +373,8 @@ jobs:
             app "boringNotch.app"
 
             zap trash: [
-              "~/Library/Application Scripts/theboringteam.boringnotch/",
-              "~/Library/Containers/theboringteam.boringnotch/",
+              "~/Library/Application Scripts/com.k0g1.boringnotch.optimized/",
+              "~/Library/Containers/com.k0g1.boringnotch.optimized/",
             ]
           end
           EOF
@@ -404,8 +404,8 @@ jobs:
             app "boringNotch.app"
 
             zap trash: [
-              "~/Library/Application Scripts/theboringteam.boringnotch/",
-              "~/Library/Containers/theboringteam.boringnotch/",
+              "~/Library/Application Scripts/com.k0g1.boringnotch.optimized/",
+              "~/Library/Containers/com.k0g1.boringnotch.optimized/",
             ]
           end
           EOF
@@ -467,8 +467,8 @@ jobs:
             app "boringNotch.app"
 
             zap trash: [
-              "~/Library/Application Scripts/theboringteam.boringnotch/",
-              "~/Library/Containers/theboringteam.boringnotch/",
+              "~/Library/Application Scripts/com.k0g1.boringnotch.optimized/",
+              "~/Library/Containers/com.k0g1.boringnotch.optimized/",
             ]
           end
           EOF

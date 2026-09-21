@@ -25,7 +25,7 @@ final class VolumeManager: NSObject, ObservableObject {
     private var previousVolumeBeforeMute: Float32 = 0.2
     private var softwareMuted: Bool = false
     private let listenerQueue = DispatchQueue(
-        label: "theboringteam.boringnotch.volume-listeners",
+        label: "com.k0g1.boringnotch.optimized.volume-listeners",
         qos: .userInitiated
     )
 

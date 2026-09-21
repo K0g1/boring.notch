@@ -44,14 +44,17 @@ if [[ -n "$SIGNING_IDENTITY" ]]; then
     exit 1
   }
   SIGNING_ARGS=(
-    "CODE_SIGN_STYLE=Manual"
-    "CODE_SIGN_IDENTITY=$SIGNING_IDENTITY"
+    "-allowProvisioningUpdates"
+    "CODE_SIGN_STYLE=Automatic"
+    "CODE_SIGN_IDENTITY=Apple Development"
     "DEVELOPMENT_TEAM=$SIGNING_TEAM"
     "PROVISIONING_PROFILE_SPECIFIER="
   )
   echo "Signing with $SIGNING_IDENTITY (team $SIGNING_TEAM)"
 else
-  echo "Warning: no Apple Development identity found; producing an ad-hoc build." >&2
+  echo "No Apple Development identity is available." >&2
+  echo "A hardened ad-hoc host cannot load this app's nested MediaRemote framework safely; refusing to produce a broken release." >&2
+  exit 1
 fi
 
 xcodebuild \
@@ -69,6 +72,21 @@ rm -rf -- "$CLEAN_APP"
 xattr -cr "$CLEAN_APP"
 
 codesign --verify --deep --strict --verbose=2 "$CLEAN_APP"
+signature_team() {
+  codesign -dvv "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p' | head -n 1
+}
+
+MAIN_TEAM="$(signature_team "$CLEAN_APP")"
+HELPER_TEAM="$(signature_team "$CLEAN_APP/Contents/XPCServices/BoringNotchXPCHelper.xpc")"
+MEDIA_TEAM="$(signature_team "$CLEAN_APP/Contents/Frameworks/MediaRemoteAdapter.framework")"
+[[ -n "$MAIN_TEAM" && "$MAIN_TEAM" != "not set" ]] || {
+  echo "Release app is not signed by an Apple development team." >&2
+  exit 1
+}
+[[ "$MAIN_TEAM" == "$HELPER_TEAM" && "$MAIN_TEAM" == "$MEDIA_TEAM" ]] || {
+  echo "Host, XPC helper, and MediaRemote framework have mismatched signing teams." >&2
+  exit 1
+}
 rm -f "$OUTPUT_DMG"
 hdiutil create \
   -volname "BoringNotch Optimized" \
