@@ -365,6 +365,9 @@ actor TodoistProvider: TaskProvider {
     private var lastSync: Date?
     private var didLoadCache = false
     private let staleAfter: TimeInterval = 60
+    private let fractionalISOFormatter: ISO8601DateFormatter
+    private let isoFormatter: ISO8601DateFormatter
+    private let dayFormatter: DateFormatter
 
     init(
         client: any TodoistClientProtocol = TodoistClient(),
@@ -373,6 +376,18 @@ actor TodoistProvider: TaskProvider {
     ) {
         self.client = client
         self.credentials = credentials
+        let fractionalISOFormatter = ISO8601DateFormatter()
+        fractionalISOFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        self.fractionalISOFormatter = fractionalISOFormatter
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        self.isoFormatter = isoFormatter
+        let dayFormatter = DateFormatter()
+        dayFormatter.calendar = Calendar(identifier: .gregorian)
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.timeZone = .current
+        dayFormatter.dateFormat = "yyyy-MM-dd"
+        self.dayFormatter = dayFormatter
         if let cacheURL {
             self.cacheURL = cacheURL
         } else {
@@ -527,7 +542,7 @@ actor TodoistProvider: TaskProvider {
             // their remaining item deltas must not leak back into the UI.
             return nil
         }
-        let due = Self.parseDue(item.due)
+        let due = parseDue(item.due)
         let taskURL = URL(string: "https://app.todoist.com/app/task/\(item.id)")
 
         return TaskItem(
@@ -593,24 +608,16 @@ actor TodoistProvider: TaskProvider {
         }
     }
 
-    private static func parseDue(_ due: TodoistDueDTO?) -> Date? {
+    private func parseDue(_ due: TodoistDueDTO?) -> Date? {
         guard let due else { return nil }
         if let datetime = due.datetime {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: datetime) {
+            if let date = fractionalISOFormatter.date(from: datetime) {
                 return date
             }
-            formatter.formatOptions = [.withInternetDateTime]
-            return formatter.date(from: datetime)
+            return isoFormatter.date(from: datetime)
         }
         guard let value = due.date else { return nil }
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.date(from: String(value.prefix(10)))
+        return dayFormatter.date(from: String(value.prefix(10)))
     }
 
     private static func projectColor(_ value: String?) -> TaskColor {

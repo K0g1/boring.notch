@@ -48,8 +48,10 @@ build/
 *.xcodeproj/xcuserdata
 *.xcodeproj/project.xcuserdata
 
+# Keep the shared CI/developer scheme while ignoring personal schemes.
+!boringNotch.xcodeproj/xcshareddata/xcschemes/boringNotch.xcscheme
+
 # Build artifacts
 *.ipa
 *.xcarchive
 *.dSYM
-

@@ -36,10 +36,7 @@ actor AppleRemindersProvider: TaskProvider {
     }
 
     func requestAccess() async throws -> Bool {
-        if #available(macOS 14.0, *) {
-            return try await store.requestFullAccessToReminders()
-        }
-        return try await store.requestAccess(to: .reminder)
+        try await store.requestFullAccessToReminders()
     }
 
     func refresh(force: Bool = false) async throws {
@@ -102,11 +99,7 @@ actor AppleRemindersProvider: TaskProvider {
     }
 
     private var hasAccess: Bool {
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        if #available(macOS 14.0, *) {
-            return status == .fullAccess
-        }
-        return status == .authorized
+        EKEventStore.authorizationStatus(for: .reminder) == .fullAccess
     }
 
     private func fetchReminders(in calendars: [EKCalendar]) async -> [EKReminder] {
