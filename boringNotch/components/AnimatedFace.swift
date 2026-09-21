@@ -9,6 +9,7 @@ import SwiftUI
 struct MinimalFaceFeatures: View {
     @State private var isBlinking = false
     @State private var blinkTask: Task<Void, Never>?
+    @State private var blinkGeneration: UUID?
     @State var height:CGFloat = 20;
     @State var width:CGFloat = 30;
     
@@ -51,6 +52,8 @@ struct MinimalFaceFeatures: View {
     
     func startBlinking() {
         guard blinkTask == nil else { return }
+        let generation = UUID()
+        blinkGeneration = generation
 
         blinkTask = Task { @MainActor in
             while !Task.isCancelled {
@@ -59,6 +62,7 @@ struct MinimalFaceFeatures: View {
                 } catch {
                     break
                 }
+                guard blinkGeneration == generation else { break }
 
                 withAnimation(.spring(duration: 0.2)) {
                     isBlinking = true
@@ -69,18 +73,22 @@ struct MinimalFaceFeatures: View {
                 } catch {
                     break
                 }
+                guard blinkGeneration == generation else { break }
 
                 withAnimation(.spring(duration: 0.2)) {
                     isBlinking = false
                 }
             }
 
+            guard blinkGeneration == generation else { return }
             isBlinking = false
             blinkTask = nil
+            blinkGeneration = nil
         }
     }
 
     func stopBlinking() {
+        blinkGeneration = nil
         blinkTask?.cancel()
         blinkTask = nil
         if isBlinking {
