@@ -46,18 +46,73 @@ actor ThumbnailGenerationLimiter {
     }
 }
 
+struct ThumbnailCacheIndex {
+    let countLimit: Int
+    private(set) var keysByURL: [URL: Set<String>] = [:]
+    private(set) var keyOwners: [String: URL] = [:]
+    private(set) var keyOrder: [String] = []
+
+    var keyCount: Int { keyOwners.count }
+    var urlCount: Int { keysByURL.count }
+
+    mutating func record(key: String, for url: URL) -> [String] {
+        if let previousURL = keyOwners[key], previousURL != url {
+            keysByURL[previousURL]?.remove(key)
+            removeEmptyURL(previousURL)
+        }
+        if keyOwners[key] == nil {
+            keyOrder.append(key)
+        }
+        keyOwners[key] = url
+        keysByURL[url, default: []].insert(key)
+
+        var evictedKeys: [String] = []
+        while keyOrder.count > max(1, countLimit) {
+            let oldestKey = keyOrder.removeFirst()
+            evictedKeys.append(oldestKey)
+            if let oldestURL = keyOwners.removeValue(forKey: oldestKey) {
+                keysByURL[oldestURL]?.remove(oldestKey)
+                removeEmptyURL(oldestURL)
+            }
+        }
+        return evictedKeys
+    }
+
+    mutating func remove(url: URL) -> Set<String> {
+        let keys = keysByURL.removeValue(forKey: url) ?? []
+        for key in keys {
+            keyOwners[key] = nil
+        }
+        keyOrder.removeAll(where: keys.contains)
+        return keys
+    }
+
+    mutating func removeAll() {
+        keysByURL.removeAll(keepingCapacity: false)
+        keyOwners.removeAll(keepingCapacity: false)
+        keyOrder.removeAll(keepingCapacity: false)
+    }
+
+    private mutating func removeEmptyURL(_ url: URL) {
+        if keysByURL[url]?.isEmpty == true {
+            keysByURL[url] = nil
+        }
+    }
+}
+
 actor ThumbnailService {
     static let shared = ThumbnailService()
 
     private let cache = NSCache<NSString, CGImage>()
-    private var cacheKeysByURL: [URL: Set<NSString>] = [:]
+    private var cacheIndex = ThumbnailCacheIndex(countLimit: 100)
     private var pendingRequests: [String: Task<CGImage?, Never>] = [:]
     private let thumbnailGenerator = QLThumbnailGenerator.shared
     private let generationLimiter = ThumbnailGenerationLimiter(limit: 4)
     private let memoryPressureSource: DispatchSourceMemoryPressure
+    private static let cacheCountLimit = 100
 
     private init() {
-        cache.countLimit = 100
+        cache.countLimit = Self.cacheCountLimit
         cache.totalCostLimit = 20 * 1024 * 1024
 
         let source = DispatchSource.makeMemoryPressureSource(
@@ -103,20 +158,25 @@ actor ThumbnailService {
         if let thumbnail {
             let cost = thumbnail.bytesPerRow * thumbnail.height
             cache.setObject(thumbnail, forKey: cacheKey, cost: cost)
-            cacheKeysByURL[url.standardizedFileURL, default: []].insert(cacheKey)
+            for evictedKey in cacheIndex.record(
+                key: key,
+                for: url.standardizedFileURL
+            ) {
+                cache.removeObject(forKey: evictedKey as NSString)
+            }
         }
         return thumbnail
     }
 
     func clearCache() {
         cache.removeAllObjects()
-        cacheKeysByURL.removeAll(keepingCapacity: false)
+        cacheIndex.removeAll()
     }
 
     func clearCache(for url: URL) {
         let normalizedURL = url.standardizedFileURL
-        for key in cacheKeysByURL.removeValue(forKey: normalizedURL) ?? [] {
-            cache.removeObject(forKey: key)
+        for key in cacheIndex.remove(url: normalizedURL) {
+            cache.removeObject(forKey: key as NSString)
         }
     }
 

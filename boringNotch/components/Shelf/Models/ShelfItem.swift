@@ -157,7 +157,7 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
         let image: NSImage
         guard case .file = kind else {
             image = Self.thumbnailSymbolImage(systemName: kind.iconSymbolName) ?? NSImage()
-            Self.iconCache.setObject(image, forKey: cacheKey)
+            Self.iconCache.setObject(image, forKey: cacheKey, cost: Self.imageCost(image))
             return image
         }
         if let resolvedURL = ShelfStateViewModel.shared.resolveFileURL(for: self) {
@@ -165,7 +165,7 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
         } else {
             image = NSImage()
         }
-        Self.iconCache.setObject(image, forKey: cacheKey)
+        Self.iconCache.setObject(image, forKey: cacheKey, cost: Self.imageCost(image))
         return image
     }
     
@@ -185,9 +185,9 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
-private extension ShelfItem {
+extension ShelfItem {
     @MainActor
-    static let iconCache: NSCache<NSString, NSImage> = {
+    private static let iconCache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
         cache.countLimit = 128
         cache.totalCostLimit = 8 * 1024 * 1024
@@ -195,7 +195,18 @@ private extension ShelfItem {
     }()
 
     @MainActor
-   static func thumbnailSymbolImage(
+    static func imageCost(_ image: NSImage) -> Int {
+        if let representation = image.representations.max(by: {
+            ($0.pixelsWide * $0.pixelsHigh) < ($1.pixelsWide * $1.pixelsHigh)
+        }), representation.pixelsWide > 0, representation.pixelsHigh > 0 {
+            return representation.pixelsWide * representation.pixelsHigh * 4
+        }
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        return Int(image.size.width * scale * image.size.height * scale * 4)
+    }
+
+    @MainActor
+    private static func thumbnailSymbolImage(
         systemName: String,
     size: CGSize = CGSize(width: 64, height: 80), 
     symbolPointSize: CGFloat = 38,

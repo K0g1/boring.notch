@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 @testable import boringNotch
@@ -43,6 +44,48 @@ final class LifecycleAndCacheTests: XCTestCase {
         let active = await counter.active
         XCTAssertEqual(peak, 4)
         XCTAssertEqual(active, 0)
+    }
+
+    func testThumbnailReverseIndexHasSameHardBoundAsImageCache() {
+        var index = ThumbnailCacheIndex(countLimit: 100)
+        var evictedKeys: [String] = []
+
+        for item in 0..<250 {
+            let url = URL(fileURLWithPath: "/tmp/thumbnail-\(item)")
+            evictedKeys += index.record(key: "key-\(item)", for: url)
+        }
+
+        XCTAssertEqual(index.keyCount, 100)
+        XCTAssertEqual(index.urlCount, 100)
+        XCTAssertEqual(evictedKeys.count, 150)
+        XCTAssertEqual(evictedKeys.first, "key-0")
+        XCTAssertEqual(evictedKeys.last, "key-149")
+
+        let finalURL = URL(fileURLWithPath: "/tmp/thumbnail-249")
+        XCTAssertEqual(index.remove(url: finalURL), ["key-249"])
+        XCTAssertEqual(index.keyCount, 99)
+        XCTAssertEqual(index.urlCount, 99)
+    }
+
+    @MainActor
+    func testShelfIconCostUsesPixelDimensions() {
+        let image = NSImage(size: NSSize(width: 64, height: 80))
+        image.addRepresentation(
+            NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: 128,
+                pixelsHigh: 160,
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+            )!
+        )
+
+        XCTAssertEqual(ShelfItem.imageCost(image), 128 * 160 * 4)
     }
 
     func testTaskProviderFiltersDatedAndUndatedItems() async {
