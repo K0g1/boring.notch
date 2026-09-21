@@ -47,8 +47,7 @@ struct ImageConversionOptions {
 }
 
 /// Service for processing images (background removal, conversion, PDF creation)
-@MainActor
-final class ImageProcessingService {
+final class ImageProcessingService: @unchecked Sendable {
     static let shared = ImageProcessingService()
     
     private init() {}
@@ -77,7 +76,7 @@ final class ImageProcessingService {
         
         let mask = try result.generateScaledMaskForImage(forInstances: result.allInstances, from: handler)
         
-        let output = try await applyMask(mask, to: cgImage)
+        let output = try applyMask(mask, to: cgImage)
         
         let processedImage = NSImage(cgImage: output, size: inputImage.size)
         
@@ -100,7 +99,7 @@ final class ImageProcessingService {
         return tempURL
     }
     
-    private func applyMask(_ mask: CVPixelBuffer, to image: CGImage) async throws -> CGImage {
+    private func applyMask(_ mask: CVPixelBuffer, to image: CGImage) throws -> CGImage {
         let ciImage = CIImage(cgImage: image)
         let maskImage = CIImage(cvPixelBuffer: mask)
         
@@ -113,8 +112,7 @@ final class ImageProcessingService {
             throw ImageProcessingError.backgroundRemovalFailed
         }
         
-        let context = CIContext()
-        guard let result = context.createCGImage(output, from: output.extent) else {
+        guard let result = ciContext.createCGImage(output, from: output.extent) else {
             throw ImageProcessingError.backgroundRemovalFailed
         }
         
@@ -193,12 +191,11 @@ final class ImageProcessingService {
                 return nil
             }
             let ciImage = CIImage(cgImage: cgImage)
-            let context = CIContext()
             let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
             let options: [CIImageRepresentationOption: Any] = [
                 CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): quality
             ]
-            return try? context.heifRepresentation(of: ciImage, format: .RGBA8, colorSpace: colorSpace, options: options)
+            return try? ciContext.heifRepresentation(of: ciImage, format: .RGBA8, colorSpace: colorSpace, options: options)
         }
     }
     
@@ -228,8 +225,6 @@ final class ImageProcessingService {
 
         // Preserve the source color space for exact color matching
         let colorSpace = srcCG.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
-        let ciContext = CIContext(options: [.workingColorSpace: colorSpace])
-
         // Render using the CIContext with matching color space
         guard let dstCG = ciContext.createCGImage(output, from: output.extent, format: .RGBA8, colorSpace: colorSpace) else {
             return image

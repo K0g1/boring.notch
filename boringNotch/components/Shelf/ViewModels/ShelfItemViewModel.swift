@@ -29,7 +29,6 @@ final class ShelfItemViewModel: ObservableObject {
     init(item: ShelfItem) {
         self.item = item
         self.draftTitle = item.displayName
-        Task { await loadThumbnail() }
     }
 
     var isSelected: Bool { selection.isSelected(item.id) }
@@ -37,7 +36,8 @@ final class ShelfItemViewModel: ObservableObject {
     func loadThumbnail() async {
         guard let url = item.fileURL else { return }
         if let image = await ThumbnailService.shared.thumbnail(for: url, size: CGSize(width: 56, height: 56)) {
-            self.thumbnail = image
+            guard !Task.isCancelled else { return }
+            self.thumbnail = NSImage(cgImage: image, size: CGSize(width: 56, height: 56))
         }
     }
 

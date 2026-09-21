@@ -48,18 +48,35 @@ enum ShelfItemKind: Codable, Equatable, Sendable {
 
 }
 
-@MainActor
 struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     var kind: ShelfItemKind
     var isTemporary: Bool
-    init(id: UUID = UUID(), kind: ShelfItemKind, isTemporary: Bool = false) {
+    private var presentationName: String?
+
+    init(
+        id: UUID = UUID(),
+        kind: ShelfItemKind,
+        isTemporary: Bool = false,
+        presentationName: String? = nil
+    ) {
         self.id = id
         self.kind = kind
         self.isTemporary = isTemporary
+        self.presentationName = presentationName ?? Self.makeDisplayName(for: kind)
     }
     
     var displayName: String {
+        presentationName ?? Self.makeDisplayName(for: kind)
+    }
+
+    mutating func preparePresentationMetadata() {
+        if presentationName == nil {
+            presentationName = Self.makeDisplayName(for: kind)
+        }
+    }
+
+    private static func makeDisplayName(for kind: ShelfItemKind) -> String {
         switch kind {
         case .file(let bookmarkData):
             let bookmark = Bookmark(data: bookmarkData)
@@ -118,6 +135,7 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
         }
     }
     
+    @MainActor
     var fileURL: URL? {
         guard case .file = kind else { return nil }
         return ShelfStateViewModel.shared.resolveFileURL(for: self)
@@ -129,17 +147,30 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
         else { return nil }
     }
     
+    @MainActor
     var icon: NSImage {
+        let cacheKey = identityKey as NSString
+        if let cached = Self.iconCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let image: NSImage
         guard case .file = kind else {
-            return Self.thumbnailSymbolImage(systemName: kind.iconSymbolName) ?? NSImage()
+            image = Self.thumbnailSymbolImage(systemName: kind.iconSymbolName) ?? NSImage()
+            Self.iconCache.setObject(image, forKey: cacheKey)
+            return image
         }
         if let resolvedURL = ShelfStateViewModel.shared.resolveFileURL(for: self) {
-            return NSWorkspace.shared.icon(forFile: resolvedURL.path)
+            image = NSWorkspace.shared.icon(forFile: resolvedURL.path)
+        } else {
+            image = NSImage()
         }
-        return NSImage()
+        Self.iconCache.setObject(image, forKey: cacheKey)
+        return image
     }
     
 
+    @MainActor
     func cleanupStoredData() {
         guard case let .file(bookmark) = kind,
               let context = resolvedContext(for: bookmark) else { return }
@@ -155,6 +186,15 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
 }
 
 private extension ShelfItem {
+    @MainActor
+    static let iconCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 128
+        cache.totalCostLimit = 8 * 1024 * 1024
+        return cache
+    }()
+
+    @MainActor
    static func thumbnailSymbolImage(
         systemName: String,
     size: CGSize = CGSize(width: 64, height: 80), 

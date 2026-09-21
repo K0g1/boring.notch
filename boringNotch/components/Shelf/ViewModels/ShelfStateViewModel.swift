@@ -12,7 +12,10 @@ final class ShelfStateViewModel: ObservableObject {
     static let shared = ShelfStateViewModel()
 
     @Published private(set) var items: [ShelfItem] = [] {
-        didSet { ShelfPersistenceService.shared.save(items) }
+        didSet {
+            let snapshot = items
+            Task { await ShelfPersistenceService.shared.scheduleSave(snapshot) }
+        }
     }
 
     @Published var isLoading: Bool = false
@@ -22,9 +25,29 @@ final class ShelfStateViewModel: ObservableObject {
     // Queue for deferred bookmark updates to avoid publishing during view updates
     private var pendingBookmarkUpdates: [ShelfItem.ID: Data] = [:]
     private var updateTask: Task<Void, Never>?
+    private var initialLoadTask: Task<[ShelfItem], Never>?
 
     private init() {
-        items = ShelfPersistenceService.shared.load()
+        isLoading = true
+        let loadTask = Task { await ShelfPersistenceService.shared.load() }
+        initialLoadTask = loadTask
+
+        Task { @MainActor [weak self] in
+            var restoredItems = await loadTask.value
+            for index in restoredItems.indices {
+                restoredItems[index].preparePresentationMetadata()
+            }
+
+            guard let self else { return }
+            var merged = restoredItems
+            var seen = Set(merged.map(\.identityKey))
+            for item in self.items where seen.insert(item.identityKey).inserted {
+                merged.append(item)
+            }
+            self.items = merged
+            self.isLoading = false
+            self.initialLoadTask = nil
+        }
     }
 
 
@@ -92,6 +115,7 @@ final class ShelfStateViewModel: ObservableObject {
     func cleanupInvalidItems() {
         Task { [weak self] in
             guard let self else { return }
+            _ = await self.initialLoadTask?.value
             var keep: [ShelfItem] = []
             for item in self.items {
                 switch item.kind {

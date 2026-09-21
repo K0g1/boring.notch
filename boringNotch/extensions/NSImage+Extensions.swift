@@ -13,6 +13,10 @@ import CoreImage
 import CoreGraphics
 import CoreImage.CIFilterBuiltins
 
+private enum ImageAnalysisContext {
+    static let shared = CIContext(options: [.cacheIntermediates: false])
+}
+
 extension NSImage {
 
     
@@ -25,8 +29,10 @@ extension NSImage {
                 return
             }
             
-            let width = cgImage.width
-            let height = cgImage.height
+            // Color analysis does not benefit from retaining every source pixel.
+            // A small fixed buffer also places a hard ceiling on temporary memory.
+            let width = 48
+            let height = 48
             let totalPixels = width * height
             
             guard let context = CGContext(data: nil,
@@ -51,17 +57,17 @@ extension NSImage {
                 return
             }
             
-            let pointer = data.bindMemory(to: UInt32.self, capacity: totalPixels)
+            let pointer = data.bindMemory(to: UInt8.self, capacity: totalPixels * 4)
             
             var totalRed: UInt64 = 0
             var totalGreen: UInt64 = 0
             var totalBlue: UInt64 = 0
             
             for i in 0..<totalPixels {
-                let color = pointer[i]
-                totalRed += UInt64(color & 0xFF)
-                totalGreen += UInt64((color >> 8) & 0xFF)
-                totalBlue += UInt64((color >> 16) & 0xFF)
+                let offset = i * 4
+                totalRed += UInt64(pointer[offset])
+                totalGreen += UInt64(pointer[offset + 1])
+                totalBlue += UInt64(pointer[offset + 2])
             }
             
             let averageRed = CGFloat(totalRed) / CGFloat(totalPixels) / 255.0
@@ -120,15 +126,15 @@ extension NSImage {
             return 0
         }
         
-        let context = CIContext(options: nil)
-        
         var bitmap = [UInt8](repeating: 0, count: 4)
-        context.render(outputImage,
-                       toBitmap: &bitmap,
-                       rowBytes: 4,
-                       bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-                       format: .RGBA8,
-                       colorSpace: CGColorSpaceCreateDeviceRGB())
+        ImageAnalysisContext.shared.render(
+            outputImage,
+            toBitmap: &bitmap,
+            rowBytes: 4,
+            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
         
         let brightness = (0.2126 * CGFloat(bitmap[0]) + 0.7152 * CGFloat(bitmap[1]) + 0.0722 * CGFloat(bitmap[2])) / 255.0
         
