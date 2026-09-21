@@ -10,6 +10,8 @@ CLEAN_APP="$STAGING_DIR/BoringNotch-Optimized.app"
 OUTPUT_APP="$DIST_DIR/BoringNotch-Optimized.app"
 OUTPUT_DMG="$DIST_DIR/BoringNotch-Optimized.dmg"
 OUTPUT_ZIP="$DIST_DIR/BoringNotch-Optimized.app.zip"
+SIGNING_IDENTITY="${BORING_NOTCH_SIGNING_IDENTITY:-}"
+SIGNING_TEAM="${BORING_NOTCH_SIGNING_TEAM:-}"
 
 [[ "$DIST_DIR" != "/" && "$DIST_DIR" != "$ROOT_DIR" ]] || {
   echo "Refusing unsafe release directory: $DIST_DIR" >&2
@@ -20,6 +22,38 @@ OUTPUT_ZIP="$DIST_DIR/BoringNotch-Optimized.app.zip"
 
 mkdir -p "$DIST_DIR" "$STAGING_DIR"
 
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  SIGNING_IDENTITY="$(
+    security find-identity -v -p codesigning 2>/dev/null \
+      | sed -n 's/.*"\(Apple Development:.*\)"/\1/p' \
+      | head -n 1
+  )"
+fi
+
+SIGNING_ARGS=()
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+  if [[ -z "$SIGNING_TEAM" ]]; then
+    SIGNING_TEAM="$(
+      security find-certificate -c "$SIGNING_IDENTITY" -p 2>/dev/null \
+        | openssl x509 -noout -subject 2>/dev/null \
+        | sed -E 's/.*OU=([^,]+).*/\1/'
+    )"
+  fi
+  [[ -n "$SIGNING_TEAM" ]] || {
+    echo "Unable to determine the team for signing identity: $SIGNING_IDENTITY" >&2
+    exit 1
+  }
+  SIGNING_ARGS=(
+    "CODE_SIGN_STYLE=Manual"
+    "CODE_SIGN_IDENTITY=$SIGNING_IDENTITY"
+    "DEVELOPMENT_TEAM=$SIGNING_TEAM"
+    "PROVISIONING_PROFILE_SPECIFIER="
+  )
+  echo "Signing with $SIGNING_IDENTITY (team $SIGNING_TEAM)"
+else
+  echo "Warning: no Apple Development identity found; producing an ad-hoc build." >&2
+fi
+
 xcodebuild \
   -project "$ROOT_DIR/boringNotch.xcodeproj" \
   -scheme boringNotch \
@@ -27,6 +61,7 @@ xcodebuild \
   -destination "generic/platform=macOS" \
   -derivedDataPath "$DERIVED_DATA" \
   -quiet \
+  "${SIGNING_ARGS[@]}" \
   build
 
 rm -rf -- "$CLEAN_APP"
