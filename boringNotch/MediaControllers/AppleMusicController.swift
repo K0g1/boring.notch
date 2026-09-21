@@ -29,24 +29,36 @@ class AppleMusicController: MediaControllerProtocol {
     }
 
     private var notificationTask: Task<Void, Never>?
+    private var isStarted = false
     
     // MARK: - Initialization
     init() {
+    }
+
+    func start() async {
+        guard !isStarted else { return }
+        isStarted = true
         setupPlaybackStateChangeObserver()
-        Task {
-            if isActive() {
-                await updatePlaybackInfo()
-            }
+        if isActive() {
+            await updatePlaybackInfo()
         }
+    }
+
+    func stop() async {
+        isStarted = false
+        notificationTask?.cancel()
+        notificationTask = nil
     }
     
     private func setupPlaybackStateChangeObserver() {
+        notificationTask?.cancel()
         notificationTask = Task { @Sendable [weak self] in
             let notifications = DistributedNotificationCenter.default().notifications(
                 named: NSNotification.Name("com.apple.Music.playerInfo")
             )
             
             for await _ in notifications {
+                guard !Task.isCancelled else { break }
                 await self?.updatePlaybackInfo()
             }
         }

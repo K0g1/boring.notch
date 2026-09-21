@@ -36,23 +36,37 @@ class SpotifyController: MediaControllerProtocol {
 
     private var lastArtworkURL: String?
     private var artworkFetchTask: Task<Void, Never>?
+    private var isStarted = false
     
     init() {
+    }
+
+    func start() async {
+        guard !isStarted else { return }
+        isStarted = true
         setupPlaybackStateChangeObserver()
-        Task {
-            if isActive() {
-                await updatePlaybackInfo()
-            }
+        if isActive() {
+            await updatePlaybackInfo()
         }
+    }
+
+    func stop() async {
+        isStarted = false
+        notificationTask?.cancel()
+        notificationTask = nil
+        artworkFetchTask?.cancel()
+        artworkFetchTask = nil
     }
     
     private func setupPlaybackStateChangeObserver() {
+        notificationTask?.cancel()
         notificationTask = Task { @Sendable [weak self] in
             let notifications = DistributedNotificationCenter.default().notifications(
                 named: NSNotification.Name("com.spotify.client.PlaybackStateChanged")
             )
             
             for await _ in notifications {
+                guard !Task.isCancelled else { break }
                 await self?.updatePlaybackInfo()
             }
         }
@@ -143,8 +157,10 @@ class SpotifyController: MediaControllerProtocol {
                 do {
                     let data = try await ImageService.shared.fetchImageData(from: url)
 
+                    guard !Task.isCancelled else { return }
+
                     await MainActor.run { [weak self] in
-                        guard let self = self else { return }
+                        guard let self = self, self.isStarted else { return }
                         var updatedState = currentState
                         updatedState.artwork = data
                         self.playbackState = updatedState

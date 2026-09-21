@@ -11,6 +11,13 @@ import UniformTypeIdentifiers
 
 /// Dynamic representation of a sharing provider discovered at runtime
 struct QuickShareProvider: Identifiable, Hashable, Sendable {
+    static let systemShareMenuID = "System Share Menu"
+    static let systemShareMenu = QuickShareProvider(
+        id: systemShareMenuID,
+        imageData: nil,
+        supportsRawText: true
+    )
+
     var id: String
     var imageData: Data?
     var supportsRawText: Bool
@@ -25,17 +32,17 @@ class QuickShareService: ObservableObject {
     // Hold security-scoped URLs during sharing
     private var sharingAccessingURLs: [URL] = []
     private var lifecycleDelegate: SharingLifecycleDelegate?
-   
-    init() {
-        Task {
-            await discoverAvailableProviders()
-        }
-    }
+    private var discoveryTask: Task<[NSSharingService], Never>?
+    private var hasDiscoveredProviders = false
+
+    private init() {}
     
     // MARK: - Provider Discovery
     
     @MainActor
-    func discoverAvailableProviders() async {
+    func discoverAvailableProviders(force: Bool = false) async {
+        if hasDiscoveredProviders, !force { return }
+
         let finder = ShareServiceFinder()
 
         // Use simple test items without creating actual temp files
@@ -45,13 +52,23 @@ class QuickShareService: ObservableObject {
             "Test Text" as NSString
         ]
 
-        let services = await finder.findApplicableServices(for: testItems)
+        let services: [NSSharingService]
+        if let discoveryTask {
+            services = await discoveryTask.value
+        } else {
+            let task = Task { @MainActor in
+                await finder.findApplicableServices(for: testItems)
+            }
+            discoveryTask = task
+            services = await task.value
+            discoveryTask = nil
+        }
 
         var providers: [QuickShareProvider] = []
 
         for svc in services {
             let title = svc.title
-            let imgData = svc.image.tiffRepresentation
+            let imgData = compactIconData(for: svc.image)
             let supportsRawText = svc.canPerform(withItems: ["Test Text"])
             let provider = QuickShareProvider(id: title, imageData: imgData, supportsRawText: supportsRawText)
             if !providers.contains(provider) {
@@ -65,12 +82,31 @@ class QuickShareService: ObservableObject {
             providers.insert(ad, at: 0)
         }
 
-        if !providers.contains(where: { $0.id == "System Share Menu" }) {
-            providers.append(QuickShareProvider(id: "System Share Menu", imageData: nil, supportsRawText: true))
+        if !providers.contains(where: { $0.id == QuickShareProvider.systemShareMenuID }) {
+            providers.append(.systemShareMenu)
         }
 
         self.availableProviders = providers
+        hasDiscoveredProviders = true
 
+    }
+
+    @MainActor
+    private func compactIconData(for image: NSImage) -> Data? {
+        let targetSize = NSSize(width: 32, height: 32)
+        let compactImage = NSImage(size: targetSize)
+        compactImage.lockFocus()
+        image.draw(
+            in: NSRect(origin: .zero, size: targetSize),
+            from: .zero,
+            operation: .copy,
+            fraction: 1
+        )
+        compactImage.unlockFocus()
+
+        guard let tiffData = compactImage.tiffRepresentation,
+              let representation = NSBitmapImageRep(data: tiffData) else { return nil }
+        return representation.representation(using: .png, properties: [:])
     }
     
     // MARK: - File Picker
@@ -206,6 +242,6 @@ extension QuickShareProvider {
         if let airdrop = svc.availableProviders.first(where: { $0.id == "AirDrop" }) {
             return airdrop
         }
-        return svc.availableProviders.first ?? QuickShareProvider(id: "System Share Menu", imageData: nil, supportsRawText: true)
+        return svc.availableProviders.first ?? .systemShareMenu
     }
 }

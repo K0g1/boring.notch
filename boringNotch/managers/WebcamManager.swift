@@ -10,34 +10,19 @@ import SwiftUI
 class WebcamManager: NSObject, ObservableObject {
     static let shared = WebcamManager()
     
-    @Published var previewLayer: AVCaptureVideoPreviewLayer? {
-        didSet {
-            objectWillChange.send()
-        }
-    }
+    @Published var previewLayer: AVCaptureVideoPreviewLayer?
     
     private var captureSession: AVCaptureSession?
-    @Published var isSessionRunning: Bool = false {
-        didSet {
-            objectWillChange.send()
-        }
-    }
+    @Published var isSessionRunning: Bool = false
     
-    @Published var authorizationStatus: AVAuthorizationStatus = .notDetermined {
-        didSet {
-            objectWillChange.send()
-        }
-    }
+    @Published var authorizationStatus: AVAuthorizationStatus = .notDetermined
     
-    @Published var cameraAvailable: Bool = false {
-        didSet {
-            objectWillChange.send()
-        }
-    }
+    @Published var cameraAvailable: Bool = false
 
     private let sessionQueue = DispatchQueue(label: "BoringNotch.WebcamManager.SessionQueue", qos: .userInitiated)
     
     private var isCleaningUp: Bool = false
+    private var isMonitoringDeviceChanges = false
     
     // MARK: - Constants
     
@@ -62,9 +47,14 @@ class WebcamManager: NSObject, ObservableObject {
     
     private override init() {
         super.init()
+        authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    }
+
+    private func beginMonitoringDeviceChangesIfNeeded() {
+        guard !isMonitoringDeviceChanges else { return }
+        isMonitoringDeviceChanges = true
         NotificationCenter.default.addObserver(self, selector: #selector(deviceWasDisconnected), name: .AVCaptureDeviceWasDisconnected, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(deviceWasConnected), name: .AVCaptureDeviceWasConnected, object: nil)
-        checkCameraAvailability()
     }
     
     deinit {
@@ -84,6 +74,7 @@ class WebcamManager: NSObject, ObservableObject {
     
     /// Checks current authorization status and requests access if needed
     func checkAndRequestVideoAuthorization() {
+        beginMonitoringDeviceChangesIfNeeded()
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         DispatchQueue.main.async {
             self.authorizationStatus = status
@@ -115,6 +106,7 @@ class WebcamManager: NSObject, ObservableObject {
     
     /// Checks if any camera devices are available and sets up capture session if needed
     func checkCameraAvailability() {
+        beginMonitoringDeviceChangesIfNeeded()
         let availableDevices = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.external, .builtInWideAngleCamera],
             mediaType: .video,
@@ -174,11 +166,6 @@ class WebcamManager: NSObject, ObservableObject {
                 session.sessionPreset = .high
                 session.addInput(videoInput)
                 
-                let videoOutput = AVCaptureVideoDataOutput()
-                videoOutput.setSampleBufferDelegate(nil, queue: nil)
-                if session.canAddOutput(videoOutput) {
-                    session.addOutput(videoOutput)
-                }
                 session.commitConfiguration()
                 
                 self.captureSession = session
@@ -263,6 +250,7 @@ class WebcamManager: NSObject, ObservableObject {
     }
     
     func startSession() {
+        beginMonitoringDeviceChangesIfNeeded()
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             

@@ -163,7 +163,10 @@ extension Defaults.Keys {
     static let boringShelf = Key<Bool>("boringShelf", default: true)
     static let openShelfByDefault = Key<Bool>("openShelfByDefault", default: true)
     static let shelfTapToOpen = Key<Bool>("shelfTapToOpen", default: true)
-    static let quickShareProvider = Key<String>("quickShareProvider", default: QuickShareProvider.defaultProvider.id)
+    static let quickShareProvider = Key<String>(
+        "quickShareProvider",
+        default: QuickShareProvider.systemShareMenuID
+    )
     static let copyOnDrag = Key<Bool>("copyOnDrag", default: false)
     static let autoRemoveShelfItems = Key<Bool>("autoRemoveShelfItems", default: false)
     static let expandedDragDetection = Key<Bool>("expandedDragDetection", default: true)
@@ -186,13 +189,9 @@ extension Defaults.Keys {
     // Show or hide the title bar
     static let hideTitleBar = Key<Bool>("hideTitleBar", default: true)
     
-    // Helper to determine the default media controller based on NowPlaying deprecation status
+    // Capability checking is runtime policy; Defaults registration must stay side-effect free.
     static var defaultMediaController: MediaControllerType {
-        if MusicManager.shared.isNowPlayingDeprecated {
-            return .appleMusic
-        } else {
-            return .nowPlaying
-        }
+        .nowPlaying
     }
 
     static let didClearLegacyURLCacheV1 = Key<Bool>("didClearLegacyURLCache_v1", default: false)

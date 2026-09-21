@@ -9,10 +9,19 @@ import Foundation
 import AppKit
 import Combine
 
-protocol MediaControllerProtocol: ObservableObject {
+protocol MediaControllerProtocol: AnyObject, ObservableObject {
     var playbackStatePublisher: AnyPublisher<PlaybackState, Never> { get }
     var supportsVolumeControl: Bool { get }
     var supportsFavorite: Bool { get }
+
+    /// Starts subscriptions and owned background resources. Implementations
+    /// must be idempotent because controller selection can be requested more
+    /// than once while preferences are changing.
+    func start() async
+
+    /// Stops every subscription, task, timer, pipe and child process owned by
+    /// the controller. Once this returns, the controller must be quiescent.
+    func stop() async
     
     func setFavorite(_ favorite: Bool) async
     func play() async

@@ -10,8 +10,9 @@ import Combine
 import Foundation
 
 final class NowPlayingController: ObservableObject, MediaControllerProtocol {
-    // Stub for now to conform with ControllerProtocol
-    func updatePlaybackInfo() async {}
+    func updatePlaybackInfo() async {
+        await fetchFavoriteStateIfSupported(expectedTrackIdentity: trackIdentity(for: playbackState))
+    }
 
     // MARK: - Properties
     @Published private(set) var playbackState: PlaybackState = .init(
@@ -64,6 +65,9 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     private var process: Process?
     private var pipeHandler: JSONLinesPipeHandler?
     private var streamTask: Task<Void, Never>?
+    private var favoriteStateTask: Task<Void, Never>?
+    private var isStarted = false
+    private static let timestampFormatter = ISO8601DateFormatter()
 
     // MARK: - Initialization
     init?() {
@@ -92,11 +96,11 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         MRMediaRemoteSetRepeatModeFunction = unsafeBitCast(
             MRMediaRemoteSetRepeatModePointer, to: (@convention(c) (Int) -> Void).self)
 
-        Task { await setupNowPlayingObserver() }
     }
 
     deinit {
         streamTask?.cancel()
+        favoriteStateTask?.cancel()
         
         if let pipeHandler = self.pipeHandler {
             Task { await pipeHandler.close()
@@ -115,6 +119,38 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     }
 
     // MARK: - Protocol Implementation
+    func start() async {
+        guard !isStarted else { return }
+        isStarted = true
+        await setupNowPlayingObserver()
+    }
+
+    func stop() async {
+        guard isStarted || process != nil || streamTask != nil else { return }
+        isStarted = false
+
+        favoriteStateTask?.cancel()
+        favoriteStateTask = nil
+
+        let currentTask = streamTask
+        streamTask = nil
+        currentTask?.cancel()
+
+        let currentProcess = process
+        process = nil
+        if let currentProcess, currentProcess.isRunning {
+            await Task.detached(priority: .utility) {
+                currentProcess.terminate()
+                currentProcess.waitUntilExit()
+            }.value
+        }
+
+        let currentPipeHandler = pipeHandler
+        pipeHandler = nil
+        await currentPipeHandler?.close()
+        await currentTask?.value
+    }
+
     func play() async {
         MRMediaRemoteSendCommandFunction(0, nil)
     }
@@ -178,6 +214,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     
     // MARK: - Setup Methods
     private func setupNowPlayingObserver() async {
+        guard isStarted, process == nil, streamTask == nil else { return }
         let process = Process()
         guard
             let scriptURL = Bundle.main.url(forResource: "mediaremote-adapter", withExtension: "pl"),
@@ -202,6 +239,9 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
                 await self?.processJSONStream()
             }
         } catch {
+            self.process = nil
+            self.pipeHandler = nil
+            await pipeHandler.close()
             assertionFailure("Failed to launch mediaremote-adapter.pl: \(error)")
         }
     }
@@ -265,7 +305,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         }
 
         if let dateString = payload.timestamp,
-           let date = ISO8601DateFormatter().date(from: dateString) {
+           let date = Self.timestampFormatter.date(from: dateString) {
             newPlaybackState.lastUpdated = date
         } else if !diff {
             newPlaybackState.lastUpdated = Date()
@@ -283,16 +323,32 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         
         newPlaybackState.volume = payload.volume ?? (diff ? self.playbackState.volume : 0.5)
         
+        let oldTrackIdentity = trackIdentity(for: playbackState)
+        let newTrackIdentity = trackIdentity(for: newPlaybackState)
+        if oldTrackIdentity == newTrackIdentity {
+            newPlaybackState.isFavorite = playbackState.isFavorite
+        }
+
         self.playbackState = newPlaybackState
-        
-        // Fetch favorite state for supported apps asynchronously
-        await fetchFavoriteStateIfSupported()
+
+        if newTrackIdentity != oldTrackIdentity,
+           newPlaybackState.bundleIdentifier == "com.apple.Music" {
+            favoriteStateTask?.cancel()
+            favoriteStateTask = Task { [weak self] in
+                await self?.fetchFavoriteStateIfSupported(expectedTrackIdentity: newTrackIdentity)
+            }
+        }
     }
     
-    private func fetchFavoriteStateIfSupported() async {
+    private func trackIdentity(for state: PlaybackState) -> String {
+        [state.bundleIdentifier, state.title, state.artist, state.album]
+            .joined(separator: "\u{1F}")
+    }
+
+    private func fetchFavoriteStateIfSupported(expectedTrackIdentity: String) async {
         let bundleID = playbackState.bundleIdentifier
         
-        if bundleID == "com.apple.Music" {
+        if isStarted, bundleID == "com.apple.Music" {
             let script = """
             tell application "Music"
                 try
@@ -303,6 +359,9 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
             end tell
             """
             if let result = try? await AppleScriptHelper.execute(script) {
+                guard !Task.isCancelled,
+                      isStarted,
+                      trackIdentity(for: playbackState) == expectedTrackIdentity else { return }
                 var updated = self.playbackState
                 updated.isFavorite = result.booleanValue
                 self.playbackState = updated
@@ -337,7 +396,6 @@ struct NowPlayingPayload: Codable {
 actor JSONLinesPipeHandler {
     private let pipe: Pipe
     private let fileHandle: FileHandle
-    private var buffer = ""
     
     init() {
         self.pipe = Pipe()
@@ -350,53 +408,15 @@ actor JSONLinesPipeHandler {
     
     func readJSONLines<T: Decodable>(as type: T.Type, onLine: @escaping (T) async -> Void) async {
         do {
-            try await self.processLines(as: type) { decodedObject in
-                await onLine(decodedObject)
+            for try await line in fileHandle.bytes.lines {
+                guard !Task.isCancelled else { break }
+                guard let data = line.data(using: .utf8),
+                      let decoded = try? JSONDecoder().decode(T.self, from: data) else { continue }
+                await onLine(decoded)
             }
         } catch {
-            print("Error processing JSON stream: \(error)")
-        }
-    }
-    
-    private func processLines<T: Decodable>(as type: T.Type, onLine: @escaping (T) async -> Void) async throws {
-        while true {
-            let data = try await readData()
-            guard !data.isEmpty else { break }
-            
-            if let chunk = String(data: data, encoding: .utf8) {
-                buffer.append(chunk)
-                
-                while let range = buffer.range(of: "\n") {
-                    let line = String(buffer[..<range.lowerBound])
-                    buffer = String(buffer[range.upperBound...])
-                    
-                    if !line.isEmpty {
-                        await processJSONLine(line, as: type, onLine: onLine)
-                    }
-                }
-            }
-        }
-    }
-    
-    private func processJSONLine<T: Decodable>(_ line: String, as type: T.Type, onLine: @escaping (T) async -> Void) async {
-        guard let data = line.data(using: .utf8) else {
-            return
-        }
-        do {
-            let decodedObject = try JSONDecoder().decode(T.self, from: data)
-            await onLine(decodedObject)
-        } catch {
-            // Ignore lines that can't be decoded
-        }
-    }
-    
-    private func readData() async throws -> Data {
-        return try await withCheckedThrowingContinuation { continuation in
-            
-            fileHandle.readabilityHandler = { handle in
-                let data = handle.availableData
-                handle.readabilityHandler = nil
-                continuation.resume(returning: data)
+            if !Task.isCancelled {
+                print("Error processing JSON stream: \(error)")
             }
         }
     }

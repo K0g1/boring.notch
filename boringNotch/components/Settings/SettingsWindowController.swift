@@ -15,6 +15,16 @@ class SettingsWindowController: NSWindowController {
     private var updaterController: SPUStandardUpdaterController?
     
     private init() {
+        super.init(window: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func createWindowIfNeeded() {
+        guard window == nil else { return }
+
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -22,19 +32,17 @@ class SettingsWindowController: NSWindowController {
             defer: false
         )
         
-        super.init(window: window)
-        
+        self.window = window
         setupWindow()
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
     }
     
     func setUpdaterController(_ controller: SPUStandardUpdaterController) {
         self.updaterController = controller
-        // Recreate the content view with the proper updater controller
-        setupWindow()
+        // Avoid constructing Settings at launch. If it is already open,
+        // refresh only its root view with the new updater controller.
+        if window != nil {
+            setupWindow()
+        }
     }
     
     private func setupWindow() {
@@ -67,6 +75,8 @@ class SettingsWindowController: NSWindowController {
     }
     
     func showWindow() {
+        createWindowIfNeeded()
+
         // Set app to regular mode first
         NSApp.setActivationPolicy(.regular)
         
@@ -94,11 +104,17 @@ class SettingsWindowController: NSWindowController {
     
     override func close() {
         super.close()
-        relinquishFocus()
+        relinquishFocus(releaseWindow: true)
     }
     
-    private func relinquishFocus() {
+    private func relinquishFocus(releaseWindow: Bool = false) {
         window?.orderOut(nil)
+
+        if releaseWindow {
+            window?.contentView = nil
+            window?.delegate = nil
+            window = nil
+        }
         
         // Set app back to accessory mode immediately
         NSApp.setActivationPolicy(.accessory)
@@ -107,7 +123,7 @@ class SettingsWindowController: NSWindowController {
 
 extension SettingsWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
-        relinquishFocus()
+        relinquishFocus(releaseWindow: true)
     }
     
     func windowShouldClose(_ sender: NSWindow) -> Bool {

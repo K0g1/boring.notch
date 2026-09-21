@@ -19,7 +19,9 @@ class MusicManager: ObservableObject {
     static let shared = MusicManager()
     private var cancellables = Set<AnyCancellable>()
     private var controllerCancellables = Set<AnyCancellable>()
+    private var controllerLifecycleTask: Task<Void, Never>?
     private var debounceIdleTask: Task<Void, Never>?
+    private var isDestroyed = false
 
     // Helper to check if macOS has removed support for NowPlayingController
     public private(set) var isNowPlayingDeprecated: Bool = false
@@ -73,7 +75,9 @@ class MusicManager: ObservableObject {
         // Listen for changes to the default controller preference
         NotificationCenter.default.publisher(for: Notification.Name.mediaControllerChanged)
             .sink { [weak self] _ in
-                self?.setActiveControllerBasedOnPreference()
+                Task { @MainActor [weak self] in
+                    self?.scheduleControllerSelection()
+                }
             }
             .store(in: &cancellables)
 
@@ -88,7 +92,7 @@ class MusicManager: ObservableObject {
             }
             
             // Initialize the active controller after deprecation check
-            self.setActiveControllerBasedOnPreference()
+            self.scheduleControllerSelection()
         }
     }
 
@@ -97,84 +101,99 @@ class MusicManager: ObservableObject {
     }
     
     public func destroy() {
+        guard !isDestroyed else { return }
+        isDestroyed = true
         debounceIdleTask?.cancel()
         cancellables.removeAll()
-        controllerCancellables.removeAll()
         flipWorkItem?.cancel()
         transitionWorkItem?.cancel()
 
-        // Release active controller
-        activeController = nil
+        let previousLifecycleTask = controllerLifecycleTask
+        previousLifecycleTask?.cancel()
+        controllerLifecycleTask = Task { @MainActor [weak self] in
+            await previousLifecycleTask?.value
+            guard let self else { return }
+            self.controllerCancellables.removeAll()
+            let controller = self.activeController
+            self.activeController = nil
+            await controller?.stop()
+        }
     }
 
     // MARK: - Setup Methods
     private func createController(for type: MediaControllerType) -> (any MediaControllerProtocol)? {
-        // Cleanup previous controller
-        if activeController != nil {
-            controllerCancellables.removeAll()
-            activeController = nil
-        }
-
-        let newController: (any MediaControllerProtocol)?
-
         switch type {
         case .nowPlaying:
             // Only create NowPlayingController if not deprecated on this macOS version
             if !self.isNowPlayingDeprecated {
-                newController = NowPlayingController()
+                return NowPlayingController()
             } else {
                 return nil
             }
         case .appleMusic:
-            newController = AppleMusicController()
+            return AppleMusicController()
         case .spotify:
-            newController = SpotifyController()
+            return SpotifyController()
         case .youtubeMusic:
-            newController = YouTubeMusicController()
+            return YouTubeMusicController()
         }
-
-        // Set up state observation for the new controller
-        if let controller = newController {
-            controller.playbackStatePublisher
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] state in
-                    guard let self = self,
-                          self.activeController === controller else { return }
-                    self.updateFromPlaybackState(state)
-                }
-                .store(in: &controllerCancellables)
-        }
-
-        return newController
     }
 
-    private func setActiveControllerBasedOnPreference() {
-        let preferredType = Defaults[.mediaController]
-        print("Preferred Media Controller: \(preferredType)")
+    @MainActor
+    private func scheduleControllerSelection() {
+        guard !isDestroyed else { return }
 
-        // If NowPlaying is deprecated but that's the preference, use Apple Music instead
+        let preferredType = Defaults[.mediaController]
         let controllerType = (self.isNowPlayingDeprecated && preferredType == .nowPlaying)
             ? .appleMusic
             : preferredType
 
-        if let controller = createController(for: controllerType) {
-            setActiveController(controller)
-        } else if controllerType != .appleMusic, let fallbackController = createController(for: .appleMusic) {
-            // Fallback to Apple Music if preferred controller couldn't be created
-            setActiveController(fallbackController)
+        let previousTask = controllerLifecycleTask
+        previousTask?.cancel()
+        controllerLifecycleTask = Task { @MainActor [weak self] in
+            await previousTask?.value
+            guard let self, !Task.isCancelled, !self.isDestroyed else { return }
+            await self.replaceActiveController(with: controllerType)
         }
     }
 
-    private func setActiveController(_ controller: any MediaControllerProtocol) {
-        // Cancel any existing flip animation
+    @MainActor
+    private func replaceActiveController(with requestedType: MediaControllerType) async {
         flipWorkItem?.cancel()
+        controllerCancellables.removeAll()
 
-        // Set new active controller
+        let oldController = activeController
+        activeController = nil
+        await oldController?.stop()
+        guard !Task.isCancelled, !isDestroyed else { return }
+
+        let controller = createController(for: requestedType)
+            ?? (requestedType == .appleMusic ? nil : createController(for: .appleMusic))
+        guard let controller else { return }
+
+        controller.playbackStatePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak controller] state in
+                guard let self,
+                      let controller,
+                      self.activeController === controller else { return }
+                self.updateFromPlaybackState(state)
+            }
+            .store(in: &controllerCancellables)
+
         activeController = controller
-        
-        self.canFavoriteTrack = controller.supportsFavorite
+        canFavoriteTrack = controller.supportsFavorite
 
-        // Get current state from active controller
+        await controller.start()
+        if Task.isCancelled || isDestroyed || activeController !== controller {
+            await controller.stop()
+            if activeController === controller {
+                activeController = nil
+                controllerCancellables.removeAll()
+            }
+            return
+        }
+
         forceUpdate()
     }
 

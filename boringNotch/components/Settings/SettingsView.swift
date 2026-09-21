@@ -895,10 +895,6 @@ struct Shelf: View {
         quickShareService.availableProviders.first(where: { $0.id == quickShareProvider })
     }
     
-    init() {
-        Task { await QuickShareService.shared.discoverAvailableProviders() }
-    }
-    
     var body: some View {
         Form {
             Section {
@@ -987,6 +983,9 @@ struct Shelf: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+        }
+        .task {
+            await quickShareService.discoverAvailableProviders()
         }
         .accentColor(.effectiveAccent)
         .navigationTitle("Shelf")

@@ -20,12 +20,15 @@ struct FileShareView: View {
     @State private var isProcessing = false
     
     private var selectedProvider: QuickShareProvider {
-        quickShare.availableProviders.first(where: { $0.id == quickShareProvider }) ?? QuickShareProvider(id: "System Share Menu", imageData: nil, supportsRawText: true)
+        quickShare.availableProviders.first(where: { $0.id == quickShareProvider }) ?? .systemShareMenu
     }
 
     var body: some View {
         dropArea
             .background(NSViewHost(view: $hostView))
+            .task {
+                await quickShare.discoverAvailableProviders()
+            }
             .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data, .image], isTargeted: $vm.dropZoneTargeting) { providers in
                 interactionNonce = .init()
                 vm.dropEvent = true

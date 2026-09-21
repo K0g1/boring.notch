@@ -17,22 +17,54 @@ final class FullscreenMediaDetector: ObservableObject {
     @Published var fullscreenStatus: [String: Bool] = [:]
     
     private var monitorTask: Task<Void, Never>?
+    private var preferenceCancellable: AnyCancellable?
+    private var monitoringGeneration = 0
     
     private init() {
-        startMonitoring()
+        preferenceCancellable = Defaults.publisher(.hideNotchOption)
+            .map(\.newValue)
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] option in
+                guard let self else { return }
+                if option == .never {
+                    self.stopMonitoring()
+                } else {
+                    self.startMonitoring()
+                }
+            }
+
+        if Defaults[.hideNotchOption] != .never {
+            startMonitoring()
+        }
     }
     
     deinit {
         monitorTask?.cancel()
+        preferenceCancellable?.cancel()
     }
     
-    private func startMonitoring() {
+    func startMonitoring() {
+        guard monitorTask == nil, Defaults[.hideNotchOption] != .never else { return }
+        monitoringGeneration += 1
+        let generation = monitoringGeneration
         monitorTask = Task { @MainActor in
             let stream = await FullScreenMonitor.shared.spaceChanges()
             for await spaces in stream {
+                guard !Task.isCancelled else { break }
                 updateStatus(with: spaces)
             }
+            if monitoringGeneration == generation {
+                monitorTask = nil
+            }
         }
+    }
+
+    func stopMonitoring() {
+        monitoringGeneration += 1
+        monitorTask?.cancel()
+        monitorTask = nil
+        fullscreenStatus.removeAll()
     }
     
     private func updateStatus(with spaces: [MacroVisionKit.FullScreenMonitor.SpaceInfo]) {
@@ -53,4 +85,3 @@ final class FullscreenMediaDetector: ObservableObject {
         self.fullscreenStatus = newStatus
     }
 }
-
