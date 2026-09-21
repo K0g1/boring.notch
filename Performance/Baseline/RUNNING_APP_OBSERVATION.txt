@@ -1,3 +1,8 @@
+Process observations
+====================
+
+The first section below is an already-running app found before Xcode was available. The second section records the isolated Release app launched after Xcode 16.4 became available.
+
 Secondary observation of an already-running app (not a controlled build)
 =======================================================================
 
@@ -55,3 +60,37 @@ Process 96047: 12 leaks for 1728 total leaked bytes.
 
 Interpretation: the process has two MediaRemote perl child processes and vmmap reports a 309.2M physical footprint. Because launch state, enabled features, media state, display state, and exact source commit are uncontrolled, do not use these values to claim regressions or improvements.
 
+Isolated Release app observation (successful Xcode rerun)
+==========================================================
+
+Source: detached worktree `/tmp/BoringNotch-baseline-v2.7.3` at `16b0f11f51c79d42e27c10d77fd9e53c11410fdb`.
+Build command:
+xcodebuild -project boringNotch.xcodeproj -scheme boringNotch -configuration Release -sdk macosx -derivedDataPath /tmp/BoringNotch-baseline-v2.7.3-DerivedData CODE_SIGNING_ALLOWED=NO build
+Build exit: 0.
+
+The app was copied to `/tmp/BoringNotch-baseline-v2.7.3-run.app`, assigned the test-only bundle ID `com.codex.baseline.boringnotch`, and launched with `open -n` to avoid colliding with the existing user app. PID 2748 was measured at ~1:53 uptime, then terminated with its test-only XPC/perl children.
+
+Raw key output:
+vmmap -summary 2748
+  Version: 2.7.2 (262)
+  Physical footprint: 249.9M
+  Physical footprint (peak): 287.5M
+
+ps -p 2748 -o pid,ppid,lstart,etime,%cpu,%mem,rss,vsz,state,command
+  PID 2748; RSS 169728 KB; CPU field 0.0%; state S
+
+leaks 2748
+  Process 2748: 0 leaks for 0 total leaked bytes.
+
+ps -M 2748 | tail -n +2 | wc -l
+  5 thread rows at final measurement.
+
+Bounded process series (15-second spacing; `%cpu` is cumulative `ps` field):
+  2026-09-21T02:52:56Z  1.1% 204480 KB 6 threads 1 child
+  2026-09-21T02:53:11Z  0.1% 204448 KB 5 threads 1 child
+  2026-09-21T02:53:26Z  2.5% 160912 KB 5 threads 1 child
+  2026-09-21T02:53:41Z  0.0% 160816 KB 5 threads 1 child
+
+sample 2748 5 1 reported 4,333 samples of the main thread in AppKit's `mach_msg2_trap` event wait and 8,666 samples in `semaphore_wait_trap` across two caulk worker threads. Runtime stderr emitted four SwiftUI toolbar ambiguous-size warnings and one AVCapture external-device deprecation warning.
+
+The isolated process was stopped after capture; the user's existing AppTranslocated process was left running.

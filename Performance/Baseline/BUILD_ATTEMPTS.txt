@@ -1,5 +1,7 @@
-Release build attempt (unmodified checkout)
-=============================================
+Release build attempts (unmodified checkout)
+==============================================
+
+The first capture occurred before Xcode was installed and is retained below. The successful rerun used a detached worktree so the coordinator's modified `perf/lifecycle` tree was not measured.
 
 Command 1
 ---------
@@ -19,5 +21,28 @@ xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer dire
 
 Result
 ------
-No derived data or build product was created by these attempts. Release compilation, signing, archive/export, and app/DMG generation are blocked until a full Xcode installation is selected with xcode-select. No production source was changed.
+No product was created by the pre-Xcode attempt. No production source was changed.
 
+Successful rerun
+----------------
+Isolated checkout: `/tmp/BoringNotch-baseline-v2.7.3` (detached HEAD `16b0f11f51c79d42e27c10d77fd9e53c11410fdb`)
+Package graph: resolved 12 pins; targets listed: `boringNotch`, `BoringNotchXPCHelper`; schemes: `boringNotch`, `BoringNotchXPCHelper`, `KeyboardShortcuts`.
+
+Command 3 (unsigned test build)
+-------------------------------
+xcodebuild -project boringNotch.xcodeproj -scheme boringNotch -configuration Release -sdk macosx -derivedDataPath /tmp/BoringNotch-baseline-v2.7.3-DerivedData CODE_SIGNING_ALLOWED=NO build
+Exit status: 0
+Product: `/tmp/BoringNotch-baseline-v2.7.3-DerivedData/Build/Products/Release/boringNotch.app`
+Architecture: arm64; app bundle size: 21M; executable size: 11,000,152 bytes.
+
+Command 4 (normal Release build with available ad-hoc identity)
+-----------------------------------------------------------------
+xcodebuild -project boringNotch.xcodeproj -scheme boringNotch -configuration Release -sdk macosx -derivedDataPath /tmp/BoringNotch-baseline-v2.7.3-SignedDerivedData -quiet build
+Exit status: 0
+Product: `/tmp/BoringNotch-baseline-v2.7.3-SignedDerivedData/Build/Products/Release/boringNotch.app`
+`codesign --verify --deep --strict` exit status: 0.
+Signature: ad-hoc runtime (`CODE_SIGN_IDENTITY=-`), no TeamIdentifier; this is not a distributable Developer ID build.
+
+Build diagnostics
+-----------------
+Both successful builds emitted many non-fatal diagnostics. Representative categories include missing module-cache `.pcm` warnings on fresh DerivedData, Swift 6 strict-concurrency warnings for existing NSImage/Task and AppKit isolation code, unused-value warnings, and the existing `BoringViewCoordinator` weak-self warning. These did not fail Release compilation. There is no test target in `xcodebuild -list`; UI/manual and test-matrix execution remains pending.
