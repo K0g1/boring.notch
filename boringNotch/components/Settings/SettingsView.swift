@@ -692,10 +692,12 @@ struct Media: View {
 
 struct CalendarSettings: View {
     @ObservedObject private var calendarManager = CalendarManager.shared
+    @ObservedObject private var taskStore = TaskStore.shared
     @Default(.showCalendar) var showCalendar: Bool
     @Default(.hideCompletedReminders) var hideCompletedReminders
     @Default(.hideAllDayEvents) var hideAllDayEvents
     @Default(.autoScrollToNextEvent) var autoScrollToNextEvent
+    @State private var todoistToken = ""
 
     var body: some View {
         Form {
@@ -751,7 +753,7 @@ struct CalendarSettings: View {
                 }
             }
             Section(header: Text("Reminders")) {
-                if calendarManager.reminderAuthorizationStatus != .fullAccess {
+                if taskStore.reminderAuthorizationStatus != .fullAccess {
                     Text("Reminder access is denied. Please enable it in System Settings.")
                         .foregroundColor(.red)
                         .multilineTextAlignment(.center)
@@ -766,34 +768,115 @@ struct CalendarSettings: View {
                     }
                 } else {
                     List {
-                        ForEach(calendarManager.reminderLists, id: \.id) { calendar in
+                        ForEach(taskStore.reminderLists) { list in
                             Toggle(
                                 isOn: Binding(
-                                    get: { calendarManager.getCalendarSelected(calendar) },
+                                    get: { taskStore.isReminderListSelected(list) },
                                     set: { isSelected in
-                                        Task {
-                                            await calendarManager.setCalendarSelected(
-                                                calendar, isSelected: isSelected)
-                                        }
+                                        taskStore.setReminderListSelected(
+                                            list,
+                                            selected: isSelected
+                                        )
                                     }
                                 )
                             ) {
-                                Text(calendar.title)
+                                Text(list.name)
                             }
-                            .accentColor(lighterColor(from: calendar.color))
+                            .accentColor(
+                                Color(
+                                    red: list.color.red,
+                                    green: list.color.green,
+                                    blue: list.color.blue
+                                )
+                            )
                             .disabled(!showCalendar)
                         }
                     }
+                }
+            }
+            Section(header: Text("Todoist")) {
+                if taskStore.isTodoistConnected {
+                    LabeledContent("Status") {
+                        Label("Connected", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                    LabeledContent("Account", value: "Personal API token")
+                    if let lastSync = taskStore.lastTodoistSync {
+                        LabeledContent("Last sync") {
+                            Text(lastSync, style: .relative)
+                        }
+                    }
+                    HStack {
+                        Button("Refresh") {
+                            Task { await taskStore.refresh(force: true) }
+                        }
+                        .disabled(taskStore.isRefreshing)
+                        Button("Disconnect", role: .destructive) {
+                            Task { await taskStore.disconnectTodoist() }
+                        }
+                    }
+
+                    if !taskStore.todoistProjects.isEmpty {
+                        Text("Projects").font(.headline)
+                        ForEach(taskStore.todoistProjects) { project in
+                            Toggle(
+                                project.name,
+                                isOn: Binding(
+                                    get: { taskStore.isTodoistProjectSelected(project) },
+                                    set: { selected in
+                                        taskStore.setTodoistProjectSelected(
+                                            project,
+                                            selected: selected
+                                        )
+                                    }
+                                )
+                            )
+                            .tint(
+                                Color(
+                                    red: project.color.red,
+                                    green: project.color.green,
+                                    blue: project.color.blue
+                                )
+                            )
+                        }
+                    }
+                } else {
+                    SecureField("API token", text: $todoistToken)
+                        .textContentType(.password)
+                    Button("Connect") {
+                        let token = todoistToken
+                        todoistToken = ""
+                        Task { await taskStore.connectTodoist(token: token) }
+                    }
+                    .disabled(
+                        todoistToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || taskStore.isRefreshing
+                    )
+                    Text("Create a personal API token in Todoist Settings → Integrations → Developer. Public integrations should use OAuth.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let error = taskStore.lastError {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .accentColor(.effectiveAccent)
         .navigationTitle("Calendar")
         .onAppear {
+            taskStore.beginVisibleRefresh()
             Task {
                 await calendarManager.checkCalendarAuthorization()
-                await calendarManager.checkReminderAuthorization()
+                if taskStore.reminderAuthorizationStatus == .notDetermined {
+                    await taskStore.requestReminderAccess()
+                }
             }
+        }
+        .onDisappear {
+            taskStore.endVisibleRefresh()
         }
     }
 }

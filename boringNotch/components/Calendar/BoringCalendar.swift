@@ -181,46 +181,91 @@ struct WheelPicker: View {
 struct CalendarView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject private var calendarManager = CalendarManager.shared
+    @ObservedObject private var taskStore = TaskStore.shared
     @State private var selectedDate = Date()
+    @State private var taskRefreshActive = false
+    @State private var showsUndatedTodoistTasks = false
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading) {
-                    Text(selectedDate.formatted(.dateTime.month(.abbreviated)))
+                    Text(
+                        showsUndatedTodoistTasks
+                            ? "Tasks"
+                            : selectedDate.formatted(.dateTime.month(.abbreviated))
+                    )
                         .font(.title3)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
-                    Text(selectedDate.formatted(.dateTime.year()))
+                    Text(
+                        showsUndatedTodoistTasks
+                            ? "Undated"
+                            : selectedDate.formatted(.dateTime.year())
+                    )
                         .font(.title3)
                         .fontWeight(.light)
                         .foregroundColor(Color(white: 0.65))
                 }
 
                 ZStack(alignment: .top) {
-                    WheelPicker(selectedDate: $selectedDate, config: Config())
-                    HStack(alignment: .top) {
-                        LinearGradient(
-                            colors: [Color.black, .clear], startPoint: .leading, endPoint: .trailing
-                        )
-                        .frame(width: 20)
-                        Spacer()
-                        LinearGradient(
-                            colors: [.clear, Color.black], startPoint: .leading, endPoint: .trailing
-                        )
-                        .frame(width: 20)
+                    if showsUndatedTodoistTasks {
+                        HStack {
+                            Text("Todoist tasks without a due date")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .frame(height: 50)
+                    } else {
+                        WheelPicker(selectedDate: $selectedDate, config: Config())
+                        HStack(alignment: .top) {
+                            LinearGradient(
+                                colors: [Color.black, .clear], startPoint: .leading, endPoint: .trailing
+                            )
+                            .frame(width: 20)
+                            Spacer()
+                            LinearGradient(
+                                colors: [.clear, Color.black], startPoint: .leading, endPoint: .trailing
+                            )
+                            .frame(width: 20)
+                        }
                     }
+                }
+
+                if !taskStore.undatedTodoistTasks.isEmpty {
+                    Button {
+                        showsUndatedTodoistTasks.toggle()
+                    } label: {
+                        Image(
+                            systemName: showsUndatedTodoistTasks
+                                ? "calendar"
+                                : "checklist"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help(showsUndatedTodoistTasks ? "Show calendar" : "Show undated Todoist tasks")
                 }
             }
 
-            let filteredEvents = EventListView.filteredEvents(
-                events: calendarManager.events
-            )
-            if filteredEvents.isEmpty {
-                EmptyEventsView(selectedDate: selectedDate)
+            let dayTasks = showsUndatedTodoistTasks
+                ? taskStore.undatedTodoistTasks
+                : taskStore.tasks(on: selectedDate)
+            if EventListView.filteredEvents(events: calendarManager.events).isEmpty
+                && EventListView.filteredTasks(tasks: dayTasks).isEmpty {
+                if showsUndatedTodoistTasks {
+                    Text("No undated Todoist tasks")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    EmptyEventsView(selectedDate: selectedDate)
+                }
                 Spacer(minLength: 0)
             } else {
-                EventListView(events: calendarManager.events)
+                EventListView(
+                    events: showsUndatedTodoistTasks ? [] : calendarManager.events,
+                    tasks: dayTasks
+                )
             }
         }
         .listRowBackground(Color.clear)
@@ -230,17 +275,43 @@ struct CalendarView: View {
                 await calendarManager.updateCurrentDate(selectedDate)
             }
         }
-        .onChange(of: vm.notchState) { _, _ in
+        .onChange(of: vm.notchState) { _, newState in
+            updateTaskRefresh(for: newState)
             Task {
                 await calendarManager.updateCurrentDate(Date.now)
                 selectedDate = Date.now
             }
         }
         .onAppear {
+            updateTaskRefresh(for: vm.notchState)
             Task {
                 await calendarManager.updateCurrentDate(Date.now)
                 selectedDate = Date.now
             }
+        }
+        .onDisappear {
+            if taskRefreshActive {
+                taskStore.endVisibleRefresh()
+                taskRefreshActive = false
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if taskStore.lastError != nil {
+                Image(systemName: "exclamationmark.icloud")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .help("Tasks may be out of date. Cached tasks are still available.")
+            }
+        }
+    }
+
+    private func updateTaskRefresh(for state: NotchState) {
+        if state == .open, !taskRefreshActive {
+            taskStore.beginVisibleRefresh()
+            taskRefreshActive = true
+        } else if state == .closed, taskRefreshActive {
+            taskStore.endVisibleRefresh()
+            taskRefreshActive = false
         }
     }
 }
@@ -263,43 +334,67 @@ struct EmptyEventsView: View {
     }
 }
 
-struct EventListView: View {
-    @Environment(\.openURL) private var openURL
-    @ObservedObject private var calendarManager = CalendarManager.shared
-    let events: [EventModel]
-    @Default(.autoScrollToNextEvent) private var autoScrollToNextEvent
-    @Default(.showFullEventTitles) private var showFullEventTitles
+private enum AgendaItem: Identifiable, Equatable {
+    case event(EventModel)
+    case task(TaskItem)
 
-
-    static func filteredEvents(events: [EventModel]) -> [EventModel] {
-        events.filter { event in
-            if event.type.isReminder {
-                if case .reminder(let completed) = event.type {
-                    return !completed || !Defaults[.hideCompletedReminders]
-                }
-            }
-            // Filter out all-day events if setting is enabled
-            if event.isAllDay && Defaults[.hideAllDayEvents] {
-                return false
-            }
-            return true
+    var id: String {
+        switch self {
+        case .event(let event): return "event:\(event.id)"
+        case .task(let task): return task.id
         }
     }
 
-    private var filteredEvents: [EventModel] {
-        Self.filteredEvents(events: events)
+    var start: Date {
+        switch self {
+        case .event(let event): return event.start
+        case .task(let task): return task.due ?? .distantFuture
+        }
+    }
+
+    var isAllDay: Bool {
+        switch self {
+        case .event(let event): return event.isAllDay
+        case .task(let task): return task.isAllDay
+        }
+    }
+}
+
+struct EventListView: View {
+    @Environment(\.openURL) private var openURL
+    @ObservedObject private var taskStore = TaskStore.shared
+    let events: [EventModel]
+    let tasks: [TaskItem]
+    @Default(.autoScrollToNextEvent) private var autoScrollToNextEvent
+    @Default(.showFullEventTitles) private var showFullEventTitles
+
+    static func filteredEvents(events: [EventModel]) -> [EventModel] {
+        events.filter { !($0.isAllDay && Defaults[.hideAllDayEvents]) }
+    }
+
+    static func filteredTasks(tasks: [TaskItem]) -> [TaskItem] {
+        tasks.filter { task in
+            (!task.isCompleted || !Defaults[.hideCompletedReminders])
+                && !(task.isAllDay && Defaults[.hideAllDayEvents])
+        }
+    }
+
+    private var filteredAgenda: [AgendaItem] {
+        let items = Self.filteredEvents(events: events).map(AgendaItem.event)
+            + Self.filteredTasks(tasks: tasks).map(AgendaItem.task)
+        return items.sorted { lhs, rhs in
+            if lhs.start != rhs.start { return lhs.start < rhs.start }
+            if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
+            return lhs.id < rhs.id
+        }
     }
 
     private func scrollToRelevantEvent(proxy: ScrollViewProxy) {
+        guard autoScrollToNextEvent else { return }
         let now = Date()
-        // Determine a single target using preferred search order:
-        // 1) first non-all-day upcoming/in-progress event
-        // 2) first all-day event
-        // 3) last event (fallback)
-        let nonAllDayUpcoming = filteredEvents.first(where: { !$0.isAllDay && $0.end > now })
-        let firstAllDay = filteredEvents.first(where: { $0.isAllDay })
-        let lastEvent = filteredEvents.last
-        guard let target = nonAllDayUpcoming ?? firstAllDay ?? lastEvent else { return }
+        let timedUpcoming = filteredAgenda.first { !$0.isAllDay && $0.start >= now }
+        let firstAllDay = filteredAgenda.first(where: \.isAllDay)
+        guard let target = timedUpcoming ?? firstAllDay ?? filteredAgenda.last else { return }
 
         Task { @MainActor in
             withTransaction(Transaction(animation: nil)) {
@@ -311,134 +406,135 @@ struct EventListView: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
-                ForEach(filteredEvents) { event in
-                    Button(action: {
-                        if let url = event.calendarAppURL() {
-                            openURL(url)
-                        }
-                    }) {
-                        eventRow(event)
-                    }
-                    .id(event.id)
-                    .padding(.leading, -5)
-                    .buttonStyle(PlainButtonStyle())
-                    .listRowSeparator(.automatic)
-                    .listRowSeparatorTint(.gray.opacity(0.2))
-                    .listRowBackground(Color.clear)
+                ForEach(filteredAgenda) { item in
+                    agendaRow(item)
+                        .id(item.id)
+                        .padding(.leading, -5)
+                        .contentShape(Rectangle())
+                        .onTapGesture { open(item) }
+                        .listRowSeparator(.automatic)
+                        .listRowSeparatorTint(.gray.opacity(0.2))
+                        .listRowBackground(Color.clear)
                 }
             }
             .listStyle(.plain)
             .scrollIndicators(.never)
             .scrollContentBackground(.hidden)
             .background(Color.clear)
-            .onAppear {
-                scrollToRelevantEvent(proxy: proxy)
-            }
-            .onChange(of: filteredEvents) { _, _ in
+            .onAppear { scrollToRelevantEvent(proxy: proxy) }
+            .onChange(of: filteredAgenda) { _, _ in
                 scrollToRelevantEvent(proxy: proxy)
             }
         }
         Spacer(minLength: 0)
     }
 
-    private func eventRow(_ event: EventModel) -> some View {
-        if event.type.isReminder {
-            let isCompleted: Bool
-            if case .reminder(let completed) = event.type {
-                isCompleted = completed
-            } else {
-                isCompleted = false
-            }
-            return AnyView(
-                HStack(spacing: 8) {
-                    ReminderToggle(
-                        isOn: Binding(
-                            get: { isCompleted },
-                            set: { newValue in
-                                Task {
-                                    await calendarManager.setReminderCompleted(
-                                        reminderID: event.id, completed: newValue
-                                    )
-                                }
-                            }
-                        ),
-                        color: Color(event.calendar.color)
-                    )
-                    .opacity(1.0)  // Ensure the toggle is always fully opaque
-                    HStack {
-                        Text(event.title)
-                            .font(.callout)
-                            .foregroundColor(.white)
-                            .lineLimit(showFullEventTitles ? nil : 1)
-                        Spacer(minLength: 0)
-                        VStack(alignment: .trailing, spacing: 4) {
-                            if event.isAllDay {
-                                Text("All-day")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white)
-                                    .lineLimit(1)
-                            } else {
-                                Text(event.start, style: .time)
-                                    .foregroundColor(.white)
-                                    .font(.caption)
-                            }
-                        }
-                    }
-                    .opacity(
-                        isCompleted
-                            ? 0.4
-                            : event.start < Date.now && Calendar.current.isDateInToday(event.start)
-                                ? 0.6 : 1.0
-                    )
-                }
-                .padding(.vertical, 4)
-            )
-        } else {
-            return AnyView(
-                HStack(alignment: .top, spacing: 4) {
-                    Rectangle()
-                        .fill(Color(event.calendar.color))
-                        .frame(width: 3)
-                        .cornerRadius(1.5)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(event.title)
-                            .font(.callout)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .lineLimit(showFullEventTitles ? nil : 2)
-
-                        if let location = event.location, !location.isEmpty {
-                            Text(location)
-                                .font(.caption)
-                                .foregroundColor(Color(white: 0.65))
-                                .lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                    VStack(alignment: .trailing, spacing: 4) {
-                        if event.isAllDay {
-                            Text("All-day")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                        } else {
-                            Text(event.start, style: .time)
-                                .foregroundColor(.white)
-                            Text(event.end, style: .time)
-                                .foregroundColor(Color(white: 0.65))
-                        }
-                    }
-                    .font(.caption)
-                    .frame(minWidth: 44, alignment: .trailing)
-                }
-                .opacity(
-                    event.eventStatus == .ended && Calendar.current.isDateInToday(event.start)
-                        ? 0.6 : 1.0)
-            )
+    @ViewBuilder
+    private func agendaRow(_ item: AgendaItem) -> some View {
+        switch item {
+        case .event(let event):
+            eventRow(event)
+        case .task(let task):
+            taskRow(task)
         }
+    }
+
+    private func eventRow(_ event: EventModel) -> some View {
+        HStack(alignment: .top, spacing: 4) {
+            Rectangle()
+                .fill(Color(event.calendar.color))
+                .frame(width: 3)
+                .cornerRadius(1.5)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title)
+                    .font(.callout)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .lineLimit(showFullEventTitles ? nil : 2)
+                if let location = event.location, !location.isEmpty {
+                    Text(location)
+                        .font(.caption)
+                        .foregroundColor(Color(white: 0.65))
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 4) {
+                if event.isAllDay {
+                    Text("All-day").fontWeight(.medium)
+                } else {
+                    Text(event.start, style: .time).foregroundColor(.white)
+                    Text(event.end, style: .time).foregroundColor(Color(white: 0.65))
+                }
+            }
+            .font(.caption)
+            .frame(minWidth: 44, alignment: .trailing)
+        }
+        .opacity(
+            event.eventStatus == .ended && Calendar.current.isDateInToday(event.start)
+                ? 0.6 : 1
+        )
+    }
+
+    private func taskRow(_ task: TaskItem) -> some View {
+        let color = Color(
+            red: task.color.red,
+            green: task.color.green,
+            blue: task.color.blue,
+            opacity: task.color.alpha
+        )
+        return HStack(spacing: 8) {
+            ReminderToggle(
+                isOn: Binding(
+                    get: { task.isCompleted },
+                    set: { completed in
+                        Task { await taskStore.setCompleted(taskID: task.id, completed: completed) }
+                    }
+                ),
+                color: color
+            )
+            HStack(spacing: 4) {
+                if task.source == .todoist {
+                    Image(systemName: "checkmark.circle")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Todoist")
+                }
+                Text(task.title)
+                    .font(.callout)
+                    .foregroundColor(.white)
+                    .lineLimit(showFullEventTitles ? nil : 1)
+                Spacer(minLength: 0)
+                if task.mutationState == .pending {
+                    ProgressView().controlSize(.mini)
+                } else if task.mutationState == .failed {
+                    Image(systemName: "exclamationmark.circle")
+                        .foregroundStyle(.orange)
+                }
+                if task.due == nil {
+                    Text("No date")
+                        .foregroundStyle(.secondary)
+                } else if task.isAllDay {
+                    Text("All-day")
+                        .fontWeight(.medium)
+                } else if let due = task.due {
+                    Text(due, style: .time)
+                }
+            }
+            .font(.caption)
+            .opacity(task.isCompleted ? 0.4 : 1)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func open(_ item: AgendaItem) {
+        let url: URL?
+        switch item {
+        case .event(let event): url = event.calendarAppURL()
+        case .task(let task): url = task.deepLink
+        }
+        if let url { openURL(url) }
     }
 }
 

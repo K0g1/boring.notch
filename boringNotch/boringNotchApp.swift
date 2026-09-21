@@ -277,6 +277,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
 
+        // A connected Todoist account refreshes on app activation. Disconnected
+        // installs do not initialize the task stack at launch.
+        if (try? TodoistKeychainStore().readToken()) != nil {
+            Task { @MainActor in
+                TaskStore.shared.start()
+            }
+        }
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(screenConfigurationDidChange),

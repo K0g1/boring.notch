@@ -175,6 +175,8 @@ extension Defaults.Keys {
     
     // MARK: Calendar
     static let calendarSelectionState = Key<CalendarSelectionState>("calendarSelectionState", default: .all)
+    static let reminderSelectionState = Key<CalendarSelectionState>("reminderSelectionState", default: .all)
+    static let selectedTodoistProjectIDs = Key<[String]?>("selectedTodoistProjectIDs", default: nil)
     static let hideAllDayEvents = Key<Bool>("hideAllDayEvents", default: false)
     static let showFullEventTitles = Key<Bool>("showFullEventTitles", default: false)
     static let autoScrollToNextEvent = Key<Bool>("autoScrollToNextEvent", default: true)

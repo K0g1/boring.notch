@@ -45,21 +45,16 @@ class CalendarService: CalendarServiceProviding {
     }
     
     func calendars() async -> [CalendarModel] {
-        var calendars: [EKCalendar] = []
-        
-        for type in [EKEntityType.event, .reminder] where hasAccess(to: type) {
-            calendars.append(contentsOf: store.calendars(for: type))
-        }
-        
-        return calendars.map { CalendarModel(from: $0) }
+        guard hasAccess(to: .event) else { return [] }
+        return store.calendars(for: .event).map { CalendarModel(from: $0) }
     }
     
     func events(from start: Date, to end: Date, calendars ids: [String]) async -> [EventModel] {
         let allCalendars = await self.calendars()
         let filteredCalendars = allCalendars.filter { ids.isEmpty || ids.contains($0.id) }
+        let eventStoreCalendars = store.calendars(for: .event)
         let ekCalendars = filteredCalendars.compactMap { calendarModel in
-            store.calendars(for: .event).first { $0.calendarIdentifier == calendarModel.id } ??
-            store.calendars(for: .reminder).first { $0.calendarIdentifier == calendarModel.id }
+            eventStoreCalendars.first { $0.calendarIdentifier == calendarModel.id }
         }
         
         var events: [EventModel] = []
@@ -72,49 +67,7 @@ class CalendarService: CalendarServiceProviding {
             events.append(contentsOf: ekEvents.compactMap { EventModel(from: $0) })
         }
         
-        // Fetch reminders
-        if hasAccess(to: .reminder) {
-            let reminderCalendars = ekCalendars.filter { store.calendars(for: .reminder).contains($0) }
-            events.append(contentsOf: await fetchReminders(from: start, to: end, calendars: reminderCalendars))
-        }
-        
         return events.sorted { $0.start < $1.start }
-    }
-    
-    private func fetchReminders(from start: Date, to end: Date, calendars: [EKCalendar]) async -> [EventModel] {
-        return await withCheckedContinuation { continuation in
-            // Create predicate for reminders with due dates in the specified range
-            let predicate = store.predicateForReminders(in: calendars)
-            
-            store.fetchReminders(matching: predicate) { reminders in
-                
-                let filteredReminders = (reminders ?? []).filter { reminder in
-                    // Check if reminder has a due date within our range
-                    guard let dueDate = reminder.dueDateComponents?.date else {
-                        return false
-                    }
-                    
-                    return dueDate >= start && dueDate <= end
-                }
-                
-                // Convert to EventModel
-                let eventModels = filteredReminders.compactMap { reminder in
-                    EventModel(from: reminder)
-                }
-                
-                continuation.resume(returning: eventModels)
-            }
-        }
-    }
-    
-    func setReminderCompleted(reminderID: String, completed: Bool) async {
-        guard let reminder = store.calendarItem(withIdentifier: reminderID) as? EKReminder else { return }
-        reminder.isCompleted = completed
-        do {
-            try store.save(reminder, commit: true)
-        } catch {
-            print("Failed to update reminder completion: \(error)")
-        }
     }
 }
 

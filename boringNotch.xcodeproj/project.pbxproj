@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A20000000000000000000001 /* TaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* TaskItem.swift */; };
+		A20000000000000000000002 /* AppleRemindersProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* AppleRemindersProvider.swift */; };
+		A20000000000000000000003 /* TodoistProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* TodoistProvider.swift */; };
+		A20000000000000000000004 /* TaskStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* TaskStore.swift */; };
 		1100290C2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */; };
 		110029272E84FD4C00035A57 /* TemporaryFileStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */; };
 		1100292A2E8691B400035A57 /* FileShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029292E8691B400035A57 /* FileShareView.swift */; };
@@ -181,6 +185,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A10000000000000000000001 /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
+		A10000000000000000000002 /* AppleRemindersProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleRemindersProvider.swift; sourceTree = "<group>"; };
+		A10000000000000000000003 /* TodoistProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoistProvider.swift; sourceTree = "<group>"; };
+		A10000000000000000000004 /* TaskStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskStore.swift; sourceTree = "<group>"; };
 		1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSItemProvider+LoadHelpers.swift"; sourceTree = "<group>"; };
 		110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryFileStorageService.swift; sourceTree = "<group>"; };
 		110029292E8691B400035A57 /* FileShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileShareView.swift; sourceTree = "<group>"; };
@@ -438,6 +446,8 @@
 		116398942DF5D6B40052E6AF /* Providers */ = {
 			isa = PBXGroup;
 			children = (
+				A10000000000000000000002 /* AppleRemindersProvider.swift */,
+				A10000000000000000000003 /* TodoistProvider.swift */,
 				116398952DF5D6C00052E6AF /* CalendarServiceProviding.swift */,
 			);
 			path = Providers;
@@ -510,6 +520,7 @@
 		147163B52C5D804B0068B555 /* managers */ = {
 			isa = PBXGroup;
 			children = (
+				A10000000000000000000004 /* TaskStore.swift */,
 				11D58EA12E760AE100FA8377 /* ImageService.swift */,
 				F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */,
 				112FB7342CCF16F70015238C /* NotchSpaceManager.swift */,
@@ -627,6 +638,7 @@
 		14D570C72C5F38760011E668 /* models */ = {
 			isa = PBXGroup;
 			children = (
+				A10000000000000000000001 /* TaskItem.swift */,
 				11F748812ECB07A400F841DB /* MusicControlButton.swift */,
 				118D1FD02E98FF5F00A2FF63 /* SharingStateManager.swift */,
 				1163988E2DF5CC870052E6AF /* CalendarModel.swift */,
@@ -913,6 +925,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A20000000000000000000001 /* TaskItem.swift in Sources */,
+				A20000000000000000000002 /* AppleRemindersProvider.swift in Sources */,
+				A20000000000000000000003 /* TodoistProvider.swift in Sources */,
+				A20000000000000000000004 /* TaskStore.swift in Sources */,
 				14C08BB92C8DE4B1000F8AA0 /* BoringCalendar.swift in Sources */,
 				5955950D2E900ED800C66711 /* ApplicationRelauncher.swift in Sources */,
 				1100292A2E8691B400035A57 /* FileShareView.swift in Sources */,
