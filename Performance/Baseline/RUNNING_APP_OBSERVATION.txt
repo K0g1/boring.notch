@@ -1,0 +1,57 @@
+Secondary observation of an already-running app (not a controlled build)
+=======================================================================
+
+Important qualification
+-----------------------
+The repository could not be built because full Xcode is unavailable. A separately running app was found under an AppTranslocation path. Its bundle reports version 2.7.3 (271), but the binary's exact source commit cannot be proven from this checkout. Treat these observations as context only, not as the authoritative Release baseline.
+
+Bundle path:
+/private/var/folders/7h/73bsv66n6cq70fmv7f_w689h0000gn/T/AppTranslocation/A0FB5CD7-1743-4916-BCE0-CE3BFEE6D8E8/d/boringNotch.app
+Executable: .../Contents/MacOS/boringNotch
+Bundle identifier: theboringteam.boringnotch
+Bundle display name: TheBoringNotch
+Bundle version: 2.7.3 (271)
+Minimum macOS: 14.0
+Build SDK: macOS 15.5 (24F74), Xcode 16F6
+Architecture: universal (x86_64, arm64)
+Signature: Apple Development: me@iamharsh.dev (HFX4TSQ68H); signed 2025-11-24; TeamIdentifier JPWMG84CH8
+
+Process snapshot at 2026-09-21T02:29:04Z
+------------------------------------------
+  PID    PPID   ELAPSED  CPU   RSS KB  COMMAND
+  96047  1      57:41    0.0   34512   .../boringNotch.app/Contents/MacOS/boringNotch
+  96052  96047  57:35    0.0   6880    /usr/bin/perl .../mediaremote-adapter.pl ... stream
+  96061  96047  56:59    0.0   6960    /usr/bin/perl .../mediaremote-adapter.pl ... stream
+
+Raw process sample command:
+ps -p 96047,96052,96061 -o pid,ppid,lstart,etime,%cpu,%mem,rss,vsz,state,comm
+
+Short CPU/RSS series (10 second spacing; process already running)
+-------------------------------------------------------------------
+timestamp                 CPU   RSS KB
+2026-09-21T02:28:01Z      0.5   34096
+2026-09-21T02:28:11Z      1.0   45824
+2026-09-21T02:28:21Z      0.5   36640
+2026-09-21T02:28:31Z      0.6   46064
+Arithmetic mean of these four instantaneous ps readings: 0.65% CPU; RSS range 33.3-45.0 MiB. This is not a 5/30-minute controlled idle run.
+
+Raw vmmap/leaks observations
+----------------------------
+Command: vmmap -summary 96047
+Launch Time: 2026-09-20 18:31:24.502 -0700
+Version: 2.7.3 (271)
+Physical footprint: 309.2M
+Physical footprint (peak): 542.2M
+
+Command: ps -M 96047 | tail -n +2 | wc -l
+Result: 8 thread rows (including the process header row emitted by ps -M semantics; inspect raw ps output before comparing counts).
+
+Command: leaks 96047
+Result:
+Process 96047 is not debuggable. Due to security restrictions, leaks can only show or save contents of readonly memory of restricted processes.
+Process 96047: 215204 nodes malloced for 38166 KB
+Process 96047: 12 leaks for 1728 total leaked bytes.
+12 (1.69K) TOTAL; four 432-byte CGEvent root-leak groups were listed.
+
+Interpretation: the process has two MediaRemote perl child processes and vmmap reports a 309.2M physical footprint. Because launch state, enabled features, media state, display state, and exact source commit are uncontrolled, do not use these values to claim regressions or improvements.
+

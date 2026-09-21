@@ -1,0 +1,23 @@
+Release build attempt (unmodified checkout)
+=============================================
+
+Command 1
+---------
+xcodebuild -project boringNotch.xcodeproj -scheme boringNotch -configuration Release -sdk macosx -derivedDataPath /tmp/BoringNotch-Baseline-DerivedData build
+
+Exit status: 1
+Raw output:
+xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance
+
+Command 2
+---------
+xcodebuild -project boringNotch.xcodeproj -list
+
+Exit status: 1
+Raw output:
+xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance
+
+Result
+------
+No derived data or build product was created by these attempts. Release compilation, signing, archive/export, and app/DMG generation are blocked until a full Xcode installation is selected with xcode-select. No production source was changed.
+

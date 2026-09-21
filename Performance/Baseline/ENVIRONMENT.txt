@@ -1,0 +1,50 @@
+Release baseline capture (unmodified checkout)
+===============================================
+Capture UTC: 2026-09-21T02:29:04Z
+Working directory requested: /Users/kevindeng/Documents/ChatGPT/BoringNotch
+Resolved working directory observed by shell: /Users/kevindeng/Library/CloudStorage/OneDrive-UBC/Documents/ChatGPT/BoringNotch
+
+Repository
+----------
+Branch: optimized-v2.7.3
+HEAD: 16b0f11f51c79d42e27c10d77fd9e53c11410fdb
+HEAD subject: Update README.md
+Tags at HEAD: v2.7.3, baseline-v2.7.3
+Working tree: clean (git status --porcelain=v1 produced no output)
+Remotes:
+  origin   https://github.com/K0g1/boring.notch.git
+  upstream https://github.com/TheBoredTeam/boring.notch.git
+
+Host
+----
+Darwin dhcp-128-189-146-124.ubcsecure.wireless.ubc.ca 24.6.0 Darwin Kernel Version 24.6.0: Wed Nov 5 21:33:58 PST 2025; root:xnu-11417.140.69.705.2~1/RELEASE_ARM64_T6000 arm64
+ProductName: macOS
+ProductVersion: 15.7.3
+BuildVersion: 24G419
+Model: MacBookPro18,3 (MKGP3LL/A)
+CPU: Apple M1 Pro, 8 cores (6 performance, 2 efficiency)
+GPU: Apple M1 Pro, 14 cores, Metal 3
+RAM: 16 GB
+Display: one built-in Color LCD, 3024 x 1964 Retina, main/online
+Power: AC, battery 91%, charging at capture
+Network: en0 IPv4 reachable, IPv6 not reachable
+
+Toolchain availability
+----------------------
+xcode-select -p: /Library/Developer/CommandLineTools
+xcodebuild -version: fails because active developer directory is CommandLineTools
+Swift: swift-driver version 1.127.14.1; Apple Swift version 6.2.3.3.21; target arm64-apple-macosx15.0
+/Applications/Xcode*.app: no matches found (no Xcode app installed under /Applications)
+instruments: not found
+Available diagnostics: /usr/bin/vmmap, /usr/bin/heap, /usr/bin/leaks, /usr/bin/sample, /usr/sbin/spindump, /usr/bin/powermetrics
+
+Project configuration observed without Xcode
+---------------------------------------------
+Native targets in project file: BoringNotchXPCHelper, boringNotch
+Deployment target for main target: macOS 14.0
+Main target marketing version in project file: 2.7.2
+Main target build number in project file: 262
+Main target product identifier: theboringteam.boringnotch
+Swift version: 5.0
+Package.resolved pins: 12
+
