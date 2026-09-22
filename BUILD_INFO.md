@@ -1,10 +1,10 @@
 # BoringNotch Optimized build information
 
-## Release candidate
+## Beta 1
 
 - Upstream baseline: `TheBoredTeam/boring.notch` v2.7.3, commit `16b0f11f51c79d42e27c10d77fd9e53c11410fdb`
-- Optimized source used for the packaged binary: `81b686358c19385d104c18df50fee262c84c0ed7`
-- Version: `2.7.3` (`CFBundleVersion` `27301`)
+- Optimized source used for the packaged binary: `44b780e`
+- Version: `2.7.3` (`CFBundleVersion` `27302`)
 - Main bundle identifier: `com.k0g1.boringnotch.optimized`
 - XPC bundle identifier: `com.k0g1.boringnotch.optimized.BoringNotchXPCHelper`
 - Architectures: Apple Silicon and Intel (`arm64`, `x86_64`)
@@ -24,6 +24,11 @@ The release artifacts were produced with:
 ```bash
 ./script/package_release.sh
 ```
+
+This beta includes favorite macOS Shortcuts, Shelf search/Quick Look/clipboard
+paste/pinning/rename/expiration controls, quick task capture and editing for
+Reminders and Todoist, timer/stopwatch/Pomodoro sessions, and optional
+per-display home layouts.
 
 The script locates an Apple Development identity, resolves its team, performs a universal Release build with automatic signing, stages the app outside the OneDrive workspace, verifies aligned signing teams for the app/XPC/MediaRemote framework, and deep-verifies both the staged app and the ZIP extraction. It refuses to publish a hardened ad-hoc build because that configuration did not load the embedded media framework reliably.
 

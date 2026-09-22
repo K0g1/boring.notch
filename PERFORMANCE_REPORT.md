@@ -2,9 +2,9 @@
 
 ## Decision
 
-The measured signed Release build meets the requested fresh-idle memory target and the closed-notch stabilized CPU target on the available Apple Silicon machine. Its two-minute idle window plateaued after startup: RSS changed by 0.156 MiB from 30 to 120 seconds and the average sampled CPU over that stabilized window was 0.05%.
+The measured signed Release build meets the requested fresh-idle memory target and the closed-notch stabilized CPU target on the available Apple Silicon machine. Its two-minute idle window plateaued after startup: RSS changed by 0.156 MiB from 30 to 120 seconds and the average sampled CPU over that stabilized window was 0.05%. This evidence supports a beta release; it is not a production/notarization sign-off.
 
-This is a release-candidate decision for the automated scope, not a claim that the unrun 30-minute, multi-display, live-media, or real-Todoist scenarios passed.
+This is a beta decision for the automated scope, not a claim that the unrun 30-minute, multi-display, live-media, or real-Todoist scenarios passed.
 
 ## Measurement context
 
@@ -45,6 +45,7 @@ The optimized whole-series CPU average includes a 10.1% startup sample. Every sa
 - Shelf thumbnail work is lazy, de-duplicated, concurrency-limited, cancellable, and kept out of computed view properties. Persistence and expensive processing move off the main actor where practical.
 - Three unused direct packages (`Pow`, `Swift Collections`, and `SwiftUI Introspect`) were removed; nine package pins remain.
 - Todoist uses an ephemeral URL session with no URL cache. It performs one full Sync API request, persists a sync token and compact task/project/section snapshots, then uses incremental sync. Concurrent refresh requests coalesce. It refreshes on activation, explicit request, or every 60 seconds only while a task view has visible consumers; there is no closed-notch periodic poll.
+- Beta additions keep work bounded and visible-only: Shortcut favorites store at most six names, Shelf ingestion is capped at 200 items with size limits, task mutations serialize through the existing provider store, focus sessions use one completion timer plus a one-second `TimelineView` only while visible, and home layouts persist small value-only panel lists keyed by display UUID.
 
 ## Automated tests
 
@@ -63,13 +64,19 @@ The production Release target deliberately remains non-testable. Release compila
 |---|---|---|
 | Fresh idle physical footprint ≤60 MB preferred | passed | 20.5 MB final, 20.8 MB peak |
 | Closed-notch idle CPU <0.5–1% | passed for bounded run | 0.05% average from 30–120 seconds |
-| 30-minute growth <5 MB | not run | two-minute stabilized growth was +0.156 MiB; a 30-minute run is still required |
+| 30-minute growth <5 MB | not run | two-minute stabilized growth was +0.156 MiB; a 30-minute run with the beta feature matrix is still required |
 | 1,000 lifecycle cycles stable | passed for face task owner | automated start/stop test; system-wide timer count was not instrumented |
 | 100 controller switches | not run | teardown/orphan behavior passed tests and launch checks; live-controller matrix remains manual |
 | Shelf cache hard bounded | passed | unit tests for concurrency, reverse index, and icon cost |
 | Todoist closed idle negligible | not measured with a real account | design has no closed-view polling; mock transport tests passed |
 | Multi-display memory | not run | only one physical display was available |
 | Long-running representative soak | not run | requires interactive fixtures and hours of wall time |
+
+The beta-specific additions were compile-checked and covered by the existing
+21-test Debug suite where they share provider/cache/lifecycle infrastructure,
+but the complete interactive matrix for Shortcut execution, Quick Look,
+clipboard paste, task permissions, timers, and multi-display layout remains
+manual.
 
 ## Manual validation still required
 

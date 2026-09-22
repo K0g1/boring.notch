@@ -86,9 +86,13 @@ brew install --cask TheBoredTeam/boring-notch/boring-notch --no-quarantine
 - [x] Shelf functionality with AirDrop 📚
 - [x] Notch sizing customization, finetuning on different display sizes 🖥️
 - [x] System HUD replacements (volume, brightness, backlight) 🎚️💡⌨️
+- [x] Favorite macOS Shortcuts in the notch ⌘
+- [x] Shelf search, Quick Look, clipboard paste, pinning, rename, Finder reveal, and expiration 📚
+- [x] Quick task capture and task editing for Reminders and Todoist ✅
+- [x] Timer, stopwatch, and Pomodoro focus sessions ⏱️
+- [x] Layout presets with per-display panel ordering 🧩
 - [ ] Bluetooth Live Activity (connect/disconnect for bluetooth devices) 
 - [ ] Weather integration ⛅️
-- [ ] Customizable Layout options 🛠️
 - [ ] Lock Screen Widgets 🔒
 - [ ] Extension system 🧩
 - [ ] Notifications (under consideration) 🔔
@@ -187,5 +191,4 @@ For a full list of licenses and attributions, please see the [Third-Party Licens
 
 - **SwiftUI**: For making us look like coding wizards.
 - **You**: For being awesome and checking out **boring.notch**!
-
 

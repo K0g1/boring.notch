@@ -8,9 +8,10 @@ This fork starts from upstream v2.7.3 at `16b0f11`. No upstream `dev` commit or 
 - Image decoding, average-color work, artwork caches, Shelf thumbnails, Shelf persistence, drag previews, Quick Share discovery, and expensive file/image operations were bounded, made lazy, or moved away from the main actor.
 - Notch boundary animation is centralized behind `StandardAnimations`, with a separate on/off switch and a 0.25×–3.0× speed preference. Gesture-interactive animation remains independent.
 - Calendar and Reminders UI consumes a provider-neutral task model. Todoist is a separate actor-backed provider using Keychain credentials and incremental Sync API state.
+- The fork adds configurable macOS Shortcut favorites, bounded Shelf search/Quick Look/clipboard/pinning/expiration actions, provider-backed quick task capture and editing, local timer/stopwatch/Pomodoro sessions, and optional per-display home layouts.
 - A formal app-hosted XCTest target, deterministic mock networking, lifecycle/cache stress tests, performance capture scripts, repeatable run/package actions, and release verification were added.
 - Unused direct dependencies on `Pow`, `Swift Collections`, and `SwiftUI Introspect` were removed.
-- Marketing/build metadata is `2.7.3 (27301)`.
+- Marketing/build metadata for this beta is `2.7.3 (27302)`.
 
 ## Identity and update policy
 
