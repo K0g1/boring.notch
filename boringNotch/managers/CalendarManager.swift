@@ -24,6 +24,8 @@ class CalendarManager: ObservableObject {
     private let calendarService = CalendarService()
 
     private var eventStoreChangedObserver: NSObjectProtocol?
+    private var eventRequestTask: Task<[EventModel], Never>?
+    private var eventRequestGeneration = 0
 
     private init() {
         self.currentWeekStartDate = CalendarManager.startOfDay(Date())
@@ -34,6 +36,7 @@ class CalendarManager: ObservableObject {
     }
 
     deinit {
+        eventRequestTask?.cancel()
         if let observer = eventStoreChangedObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -75,20 +78,14 @@ class CalendarManager: ObservableObject {
             self.calendarAuthorizationStatus = granted ? .fullAccess : .denied
             if granted {
                 await reloadCalendarAndReminderLists()
-                events = await calendarService.events(
-                    from: currentWeekStartDate,
-                    to: Calendar.current.date(byAdding: .day, value: 1, to: currentWeekStartDate)!,
-                    calendars: selectedCalendars.map { $0.id })
+                await updateEvents()
             }
         case .restricted, .denied:
             NSLog("Calendar access denied or restricted")
         case .fullAccess:
             NSLog("Full access")
             await reloadCalendarAndReminderLists()
-            events = await calendarService.events(
-                from: currentWeekStartDate,
-                to: Calendar.current.date(byAdding: .day, value: 1, to: currentWeekStartDate)!,
-                calendars: selectedCalendars.map { $0.id })
+            await updateEvents()
         case .writeOnly:
             NSLog("Write only")
         @unknown default:
@@ -141,18 +138,39 @@ class CalendarManager: ObservableObject {
     }
 
     func updateCurrentDate(_ date: Date) async {
-        currentWeekStartDate = Calendar.current.startOfDay(for: date)
-        await updateEvents()
+        let day = Calendar.current.startOfDay(for: date)
+        currentWeekStartDate = day
+
+        // A trackpad can report several settled positions while the wheel is coming to rest.
+        // Cancel the previous request and only publish the result for the newest day. This keeps
+        // EventKit work from racing back onto the main actor with stale data.
+        eventRequestGeneration &+= 1
+        let generation = eventRequestGeneration
+        eventRequestTask?.cancel()
+
+        // Let the wheel settle before touching EventKit. This collapses a fast swipe into one
+        // request without delaying ordinary button/keyboard date changes in a noticeable way.
+        do {
+            try await Task.sleep(for: .milliseconds(120))
+        } catch {
+            return
+        }
+        guard generation == eventRequestGeneration else { return }
+
+        let calendarIDs = selectedCalendars.map { $0.id }
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: day) ?? day
+        let request = Task { [calendarService] in
+            await calendarService.events(from: day, to: end, calendars: calendarIDs)
+        }
+        eventRequestTask = request
+
+        let eventsResult = await request.value
+        guard !request.isCancelled, generation == eventRequestGeneration else { return }
+        events = eventsResult
     }
 
     private func updateEvents() async {
-        let calendarIDs = selectedCalendars.map { $0.id }
-        let eventsResult = await calendarService.events(
-            from: currentWeekStartDate,
-            to: Calendar.current.date(byAdding: .day, value: 1, to: currentWeekStartDate)!,
-            calendars: calendarIDs
-        )
-        self.events = eventsResult
+        await updateCurrentDate(currentWeekStartDate)
     }
     
 }

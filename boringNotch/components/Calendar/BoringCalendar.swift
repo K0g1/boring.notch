@@ -270,24 +270,17 @@ struct CalendarView: View {
         }
         .listRowBackground(Color.clear)
         .frame(height: 120)
-        .onChange(of: selectedDate) {
-            Task {
-                await calendarManager.updateCurrentDate(selectedDate)
-            }
-        }
         .onChange(of: vm.notchState) { _, newState in
             updateTaskRefresh(for: newState)
-            Task {
-                await calendarManager.updateCurrentDate(Date.now)
-                selectedDate = Date.now
-            }
+            guard newState == .open else { return }
+            selectedDate = Date.now
         }
         .onAppear {
             updateTaskRefresh(for: vm.notchState)
-            Task {
-                await calendarManager.updateCurrentDate(Date.now)
-                selectedDate = Date.now
-            }
+            selectedDate = Date.now
+        }
+        .task(id: Calendar.current.startOfDay(for: selectedDate)) {
+            await calendarManager.updateCurrentDate(selectedDate)
         }
         .onDisappear {
             if taskRefreshActive {
@@ -396,11 +389,15 @@ struct EventListView: View {
         let firstAllDay = filteredAgenda.first(where: \.isAllDay)
         guard let target = timedUpcoming ?? firstAllDay ?? filteredAgenda.last else { return }
 
-        Task { @MainActor in
-            withTransaction(Transaction(animation: nil)) {
-                proxy.scrollTo(target.id, anchor: .top)
-            }
+        withTransaction(Transaction(animation: nil)) {
+            proxy.scrollTo(target.id, anchor: .top)
         }
+    }
+
+    private var agendaTaskID: String {
+        filteredAgenda
+            .map { "\($0.id):\($0.start.timeIntervalSince1970)" }
+            .joined(separator: "|")
     }
 
     var body: some View {
@@ -420,8 +417,11 @@ struct EventListView: View {
             .scrollIndicators(.never)
             .scrollContentBackground(.hidden)
             .background(Color.clear)
-            .onAppear { scrollToRelevantEvent(proxy: proxy) }
-            .onChange(of: filteredAgenda) { _, _ in
+            .task(id: "\(autoScrollToNextEvent)-\(agendaTaskID)") {
+                // SwiftUI cancels this task when another day replaces the agenda. Yield once so
+                // List has installed the new row IDs before ScrollViewReader seeks to a target.
+                await Task.yield()
+                guard !Task.isCancelled else { return }
                 scrollToRelevantEvent(proxy: proxy)
             }
         }
