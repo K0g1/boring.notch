@@ -1812,6 +1812,9 @@ struct Shortcuts: View {
     var body: some View {
         Form {
             ShortcutFavoritesSettings()
+            Section("Tasks") {
+                KeyboardShortcuts.Recorder("Quick Task Capture:", name: .quickTaskCapture)
+            }
             Section {
                 KeyboardShortcuts.Recorder("Toggle Sneak Peek:", name: .toggleSneakPeek)
             } header: {

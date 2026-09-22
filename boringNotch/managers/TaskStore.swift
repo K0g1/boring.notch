@@ -21,6 +21,7 @@ final class TaskStore: ObservableObject {
     @Published private(set) var lastTodoistSync: Date?
     @Published private(set) var isRefreshing = false
     @Published private(set) var lastError: String?
+    @Published private(set) var isMutating = false
 
     private let appleProvider: AppleRemindersProvider
     private let todoistProvider: TodoistProvider
@@ -105,6 +106,7 @@ final class TaskStore: ObservableObject {
     }
 
     func refresh(force: Bool) async {
+        guard !isMutating else { return }
         if let refreshTask {
             await refreshTask.value
             return
@@ -157,6 +159,10 @@ final class TaskStore: ObservableObject {
     }
 
     func setCompleted(taskID: String, completed: Bool) async {
+        guard !isMutating else { return }
+        isMutating = true
+        defer { isMutating = false }
+        if let refreshTask { await refreshTask.value }
         guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
         let original = tasks[index]
         tasks[index].isCompleted = completed
@@ -184,6 +190,83 @@ final class TaskStore: ObservableObject {
             tasks[rollbackIndex] = original
             tasks[rollbackIndex].mutationState = .failed
             lastError = error.localizedDescription
+        }
+    }
+
+    var captureSources: [TaskSource] {
+        [TaskSource.appleReminders, .todoist].filter {
+            provider(for: $0).supportsEditing && !captureContainers(for: $0).isEmpty
+        }
+    }
+
+    func captureContainers(for source: TaskSource) -> [TaskContainer] {
+        switch source {
+        case .appleReminders:
+            return reminderAuthorizationStatus == .fullAccess ? reminderLists.filter(\.isWritable) : []
+        case .todoist:
+            return isTodoistConnected ? todoistProjects.filter(\.isWritable) : []
+        }
+    }
+
+    func canEdit(_ task: TaskItem) -> Bool {
+        provider(for: task.source).supportsEditing && captureContainers(for: task.source).contains { $0.id == task.containerID }
+    }
+
+    func create(_ draft: TaskDraft, source: TaskSource) async throws {
+        guard !isMutating else { throw TaskEditingError.busy }
+        var draft = draft
+        draft.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !draft.title.isEmpty else { throw TaskEditingError.emptyTitle }
+        guard captureContainers(for: source).contains(where: { $0.id == draft.containerID }) else {
+            throw TaskEditingError.invalidDestination
+        }
+        isMutating = true
+        defer { isMutating = false }
+        if let refreshTask { await refreshTask.value }
+        do {
+            try await provider(for: source).create(draft)
+            await reloadSnapshots()
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+            throw error
+        }
+    }
+
+    func edit(_ task: TaskItem, change: TaskChange) async throws {
+        if case .title(let title) = change, title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw TaskEditingError.emptyTitle
+        }
+        try await mutate(task, change: change)
+    }
+
+    func delete(_ task: TaskItem) async throws {
+        try await mutate(task, change: nil)
+    }
+
+    private func mutate(_ task: TaskItem, change: TaskChange?) async throws {
+        guard !isMutating else { throw TaskEditingError.busy }
+        guard canEdit(task) else { throw TaskEditingError.unsupported }
+        isMutating = true
+        defer { isMutating = false }
+        if let refreshTask { await refreshTask.value }
+        if let index = tasks.firstIndex(where: { $0.id == task.id }) { tasks[index].mutationState = .pending }
+        do {
+            if let change { try await provider(for: task.source).update(taskID: task.providerID, change: change) }
+            else { try await provider(for: task.source).delete(taskID: task.providerID) }
+            await reloadSnapshots()
+            lastError = nil
+        } catch {
+            if let index = tasks.firstIndex(where: { $0.id == task.id }) { tasks[index].mutationState = .failed }
+            lastError = error.localizedDescription
+            throw error
+        }
+    }
+
+    private func provider(for source: TaskSource) -> any TaskProvider {
+        switch source {
+        case .appleReminders: return appleProvider
+        case .todoist: return todoistProvider
         }
     }
 

@@ -65,6 +65,7 @@ struct TaskContainer: Identifiable, Codable, Equatable, Sendable {
     let source: TaskSource
     var name: String
     var color: TaskColor
+    var isWritable: Bool = true
 }
 
 struct TaskItem: Identifiable, Codable, Equatable, Sendable {
@@ -119,17 +120,60 @@ struct TaskItem: Identifiable, Codable, Equatable, Sendable {
 }
 
 protocol TaskProvider: Sendable {
+    var supportsEditing: Bool { get }
     func refresh(force: Bool) async throws
     func cachedTasks() async -> [TaskItem]
     func containers() async -> [TaskContainer]
     func setCompleted(taskID: String, completed: Bool) async throws
+    func create(_ draft: TaskDraft) async throws
+    func update(taskID: String, change: TaskChange) async throws
+    func delete(taskID: String) async throws
 }
 
 extension TaskProvider {
+    var supportsEditing: Bool { false }
+    func create(_ draft: TaskDraft) async throws { throw TaskEditingError.unsupported }
+    func update(taskID: String, change: TaskChange) async throws { throw TaskEditingError.unsupported }
+    func delete(taskID: String) async throws { throw TaskEditingError.unsupported }
+
     func tasks(in interval: DateInterval) async -> [TaskItem] {
         await cachedTasks().filter { task in
             guard let due = task.due else { return false }
             return interval.contains(due)
+        }
+    }
+}
+
+struct TaskDraft: Sendable {
+    var title: String
+    var containerID: String
+    var due: Date?
+    var isAllDay = true
+}
+
+enum TaskChange: Sendable {
+    case title(String)
+    case due(Date?, isAllDay: Bool)
+    case priority(TaskPriority?)
+}
+
+enum TaskEditingError: LocalizedError {
+    case unsupported, invalidDestination, emptyTitle, busy
+    var errorDescription: String? {
+        switch self {
+        case .unsupported: return "This task does not support editing."
+        case .invalidDestination: return "Choose an available, writable list or project."
+        case .emptyTitle: return "Enter a task title."
+        case .busy: return "Wait for the current task change to finish."
+        }
+    }
+}
+
+extension TaskSource {
+    var displayName: String {
+        switch self {
+        case .appleReminders: return "Apple Reminders"
+        case .todoist: return "Todoist"
         }
     }
 }

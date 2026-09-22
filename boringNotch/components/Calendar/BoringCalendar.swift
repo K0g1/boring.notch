@@ -411,7 +411,6 @@ struct EventListView: View {
                         .id(item.id)
                         .padding(.leading, -5)
                         .contentShape(Rectangle())
-                        .onTapGesture { open(item) }
                         .listRowSeparator(.automatic)
                         .listRowSeparatorTint(.gray.opacity(0.2))
                         .listRowBackground(Color.clear)
@@ -434,6 +433,7 @@ struct EventListView: View {
         switch item {
         case .event(let event):
             eventRow(event)
+                .onTapGesture { open(item) }
         case .task(let task):
             taskRow(task)
         }
@@ -494,6 +494,7 @@ struct EventListView: View {
                 ),
                 color: color
             )
+            .disabled(!taskStore.canEdit(task) || taskStore.isMutating)
             HStack(spacing: 4) {
                 if task.source == .todoist {
                     Image(systemName: "checkmark.circle")
@@ -524,6 +525,9 @@ struct EventListView: View {
             }
             .font(.caption)
             .opacity(task.isCompleted ? 0.4 : 1)
+            .contentShape(Rectangle())
+            .onTapGesture { open(.task(task)) }
+            TaskRowActions(task: task)
         }
         .padding(.vertical, 4)
     }

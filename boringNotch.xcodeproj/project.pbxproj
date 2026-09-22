@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A20000000000000000000005 /* QuickTaskCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* QuickTaskCapture.swift */; };
+		A20000000000000000000006 /* TaskRowActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006 /* TaskRowActions.swift */; };
 		D62000000000000000000001 /* ShortcutFavoritesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61000000000000000000001 /* ShortcutFavoritesStore.swift */; };
 		D62000000000000000000002 /* ShortcutFavoritesSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61000000000000000000002 /* ShortcutFavoritesSettings.swift */; };
 		D62000000000000000000003 /* ShortcutFavoritesRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61000000000000000000003 /* ShortcutFavoritesRow.swift */; };
@@ -193,6 +195,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A10000000000000000000005 /* QuickTaskCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickTaskCapture.swift; sourceTree = "<group>"; };
+		A10000000000000000000006 /* TaskRowActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRowActions.swift; sourceTree = "<group>"; };
 		D61000000000000000000001 /* ShortcutFavoritesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutFavoritesStore.swift; sourceTree = "<group>"; };
 		D61000000000000000000002 /* ShortcutFavoritesSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutFavoritesSettings.swift; sourceTree = "<group>"; };
 		D61000000000000000000003 /* ShortcutFavoritesRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutFavoritesRow.swift; sourceTree = "<group>"; };
@@ -564,6 +568,8 @@
 			isa = PBXGroup;
 			children = (
 				14C08BB82C8DE4B1000F8AA0 /* BoringCalendar.swift */,
+				A10000000000000000000005 /* QuickTaskCapture.swift */,
+				A10000000000000000000006 /* TaskRowActions.swift */,
 			);
 			path = Calendar;
 			sourceTree = "<group>";
@@ -993,6 +999,8 @@
 				A20000000000000000000003 /* TodoistProvider.swift in Sources */,
 				A20000000000000000000004 /* TaskStore.swift in Sources */,
 				14C08BB92C8DE4B1000F8AA0 /* BoringCalendar.swift in Sources */,
+				A20000000000000000000005 /* QuickTaskCapture.swift in Sources */,
+				A20000000000000000000006 /* TaskRowActions.swift in Sources */,
 				5955950D2E900ED800C66711 /* ApplicationRelauncher.swift in Sources */,
 				1100292A2E8691B400035A57 /* FileShareView.swift in Sources */,
 				147163982C5D35B70068B555 /* MusicVisualizer.swift in Sources */,

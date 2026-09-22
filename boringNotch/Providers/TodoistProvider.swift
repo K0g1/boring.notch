@@ -119,6 +119,15 @@ enum TodoistClientError: LocalizedError {
 protocol TodoistClientProtocol: Sendable {
     func sync(token: String, syncToken: String) async throws -> TodoistSyncResponse
     func setCompleted(taskID: String, completed: Bool, token: String) async throws
+    func create(_ draft: TaskDraft, token: String) async throws -> TodoistItemDTO
+    func update(taskID: String, change: TaskChange, token: String) async throws -> TodoistItemDTO
+    func delete(taskID: String, token: String) async throws
+}
+
+extension TodoistClientProtocol {
+    func create(_ draft: TaskDraft, token: String) async throws -> TodoistItemDTO { throw TaskEditingError.unsupported }
+    func update(taskID: String, change: TaskChange, token: String) async throws -> TodoistItemDTO { throw TaskEditingError.unsupported }
+    func delete(taskID: String, token: String) async throws { throw TaskEditingError.unsupported }
 }
 
 actor TodoistClient: TodoistClientProtocol {
@@ -194,6 +203,51 @@ actor TodoistClient: TodoistClientProtocol {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         _ = try await perform(request)
+    }
+
+    func create(_ draft: TaskDraft, token: String) async throws -> TodoistItemDTO {
+        var body: [String: Any] = ["content": draft.title, "project_id": draft.containerID]
+        if let due = draft.due { body.merge(dueBody(due, allDay: draft.isAllDay)) { _, new in new } }
+        let data = try await mutate(path: "tasks", method: "POST", body: body, token: token)
+        return try decoder.decode(TodoistItemDTO.self, from: data)
+    }
+
+    func update(taskID: String, change: TaskChange, token: String) async throws -> TodoistItemDTO {
+        let body: [String: Any]
+        switch change {
+        case .title(let title): body = ["content": title]
+        case .priority(let priority): body = ["priority": priority?.rawValue ?? 1]
+        case .due(let date, let allDay):
+            body = date.map { dueBody($0, allDay: allDay) } ?? ["due_string": "no date"]
+        }
+        let data = try await mutate(path: "tasks/\(taskID)", method: "POST", body: body, token: token)
+        return try decoder.decode(TodoistItemDTO.self, from: data)
+    }
+
+    func delete(taskID: String, token: String) async throws {
+        _ = try await mutate(path: "tasks/\(taskID)", method: "DELETE", body: nil, token: token)
+    }
+
+    private func dueBody(_ date: Date, allDay: Bool) -> [String: Any] {
+        if allDay {
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            return ["due_date": formatter.string(from: date)]
+        }
+        return ["due_datetime": ISO8601DateFormatter().string(from: date)]
+    }
+
+    private func mutate(path: String, method: String, body: [String: Any]?, token: String) async throws -> Data {
+        var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Reuse this request ID across rate-limit retries; never replay ambiguous failures.
+        request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Request-Id")
+        if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
+        return try await perform(request)
     }
 
     private func perform(_ request: URLRequest) async throws -> Data {
@@ -361,6 +415,7 @@ private struct TodoistCacheEnvelope: Codable {
 }
 
 actor TodoistProvider: TaskProvider {
+    nonisolated let supportsEditing = true
     private let client: any TodoistClientProtocol
     private let credentials: any TodoistCredentialStoring
     private let cacheURL: URL
@@ -505,6 +560,7 @@ actor TodoistProvider: TaskProvider {
             throw TodoistClientError.invalidToken
         }
         try await client.setCompleted(taskID: taskID, completed: completed, token: token)
+        guard try credentials.readToken() == token else { return }
 
         if var item = itemCache[taskID] {
             item.checked = FlexibleBool(completed)
@@ -516,7 +572,42 @@ actor TodoistProvider: TaskProvider {
             pendingCompletedIDs.remove(taskID)
         }
         persistCache()
-        try await refresh(force: true)
+        // The write already succeeded. A failed follow-up refresh must not roll it back.
+        try? await refresh(force: true)
+    }
+
+    func create(_ draft: TaskDraft) async throws {
+        if let refreshTask { try await refreshTask.value }
+        loadCacheIfNeeded()
+        guard let token = try credentials.readToken() else { throw TodoistClientError.invalidToken }
+        guard projectCache[draft.containerID] != nil else { throw TaskEditingError.invalidDestination }
+        let item = try await client.create(draft, token: token)
+        // Disconnect may have occurred while the request was in flight.
+        guard try credentials.readToken() == token else { return }
+        itemCache[item.id] = item
+        persistCache()
+    }
+
+    func update(taskID: String, change: TaskChange) async throws {
+        if let refreshTask { try await refreshTask.value }
+        loadCacheIfNeeded()
+        guard let token = try credentials.readToken() else { throw TodoistClientError.invalidToken }
+        var item = try await client.update(taskID: taskID, change: change, token: token)
+        guard try credentials.readToken() == token else { return }
+        // REST task responses can omit Sync's `checked` field.
+        if item.checked == nil { item.checked = itemCache[taskID]?.checked }
+        itemCache[item.id] = item
+        persistCache()
+    }
+
+    func delete(taskID: String) async throws {
+        if let refreshTask { try await refreshTask.value }
+        guard let token = try credentials.readToken() else { throw TodoistClientError.invalidToken }
+        try await client.delete(taskID: taskID, token: token)
+        guard try credentials.readToken() == token else { return }
+        itemCache[taskID] = nil
+        pendingCompletedIDs.remove(taskID)
+        persistCache()
     }
 
     private func apply(_ response: TodoistSyncResponse) {
@@ -578,7 +669,7 @@ actor TodoistProvider: TaskProvider {
             title: item.content ?? "",
             notes: item.description,
             due: due,
-            isAllDay: item.due?.datetime == nil,
+            isAllDay: item.due?.datetime == nil && item.due?.date?.contains("T") != true,
             isCompleted: item.checked?.value ?? false,
             priority: Self.priority(from: item.priority),
             containerID: item.projectID,
@@ -644,6 +735,15 @@ actor TodoistProvider: TaskProvider {
             return isoFormatter.date(from: datetime)
         }
         guard let value = due.date else { return nil }
+        if value.contains("T") {
+            if let date = fractionalISOFormatter.date(from: value) ?? isoFormatter.date(from: value) { return date }
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = due.timezone.flatMap(TimeZone.init(identifier:)) ?? .current
+            formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            return formatter.date(from: value)
+        }
         return dayFormatter.date(from: String(value.prefix(10)))
     }
 

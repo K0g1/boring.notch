@@ -30,6 +30,7 @@ struct DynamicNotchApp: App {
 
     var body: some Scene {
         MenuBarExtra("boring.notch", systemImage: "sparkle", isInserted: $showMenuBarIcon) {
+            Button("New Task…") { TaskCaptureController.shared.show() }
             Button("Settings") {
                 SettingsWindowController.shared.showWindow()
             }
@@ -353,6 +354,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { @MainActor in
                     self?.onScreenUnlocked(notification)
                 }
+        }
+
+        KeyboardShortcuts.onKeyDown(for: .quickTaskCapture) {
+            Task { @MainActor in TaskCaptureController.shared.show() }
         }
 
         KeyboardShortcuts.onKeyDown(for: .toggleSneakPeek) { [weak self] in

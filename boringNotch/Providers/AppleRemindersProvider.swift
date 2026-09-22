@@ -21,6 +21,7 @@ enum AppleRemindersError: LocalizedError {
 }
 
 actor AppleRemindersProvider: TaskProvider {
+    nonisolated let supportsEditing = true
     private let store: EKEventStore
     private var taskCache: [String: TaskItem] = [:]
     private var listCache: [TaskContainer] = []
@@ -59,7 +60,8 @@ actor AppleRemindersProvider: TaskProvider {
                 id: $0.calendarIdentifier,
                 source: .appleReminders,
                 name: $0.title,
-                color: TaskColor($0.color)
+                color: TaskColor($0.color),
+                isWritable: $0.allowsContentModifications
             )
         }
         let containers = Dictionary(uniqueKeysWithValues: listCache.map { ($0.id, $0) })
@@ -83,10 +85,7 @@ actor AppleRemindersProvider: TaskProvider {
     }
 
     func setCompleted(taskID: String, completed: Bool) async throws {
-        guard hasAccess else { throw AppleRemindersError.accessDenied }
-        guard let reminder = store.calendarItem(withIdentifier: taskID) as? EKReminder else {
-            throw AppleRemindersError.taskNotFound
-        }
+        let reminder = try editableReminder(taskID)
 
         reminder.isCompleted = completed
         try store.save(reminder, commit: true)
@@ -96,6 +95,61 @@ actor AppleRemindersProvider: TaskProvider {
             taskCache[taskID] = item
         }
         lastRefresh = Date()
+    }
+
+    func create(_ draft: TaskDraft) async throws {
+        guard hasAccess else { throw AppleRemindersError.accessDenied }
+        guard let calendar = store.calendar(withIdentifier: draft.containerID),
+              calendar.allowsContentModifications else { throw TaskEditingError.invalidDestination }
+        let reminder = EKReminder(eventStore: store)
+        reminder.calendar = calendar
+        reminder.title = draft.title
+        setDue(draft.due, allDay: draft.isAllDay, on: reminder)
+        try save(reminder)
+    }
+
+    func update(taskID: String, change: TaskChange) async throws {
+        let reminder = try editableReminder(taskID)
+        switch change {
+        case .title(let title): reminder.title = title
+        case .due(let date, let allDay): setDue(date, allDay: allDay, on: reminder)
+        case .priority(let priority):
+            switch priority {
+            case .urgent, .high: reminder.priority = 1
+            case .normal: reminder.priority = 5
+            case .low: reminder.priority = 9
+            case nil: reminder.priority = 0
+            }
+        }
+        try save(reminder)
+    }
+
+    func delete(taskID: String) async throws {
+        let reminder = try editableReminder(taskID)
+        try store.remove(reminder, commit: true)
+        taskCache[taskID] = nil
+    }
+
+    private func editableReminder(_ id: String) throws -> EKReminder {
+        guard hasAccess else { throw AppleRemindersError.accessDenied }
+        guard let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else {
+            throw AppleRemindersError.taskNotFound
+        }
+        guard reminder.calendar.allowsContentModifications else { throw TaskEditingError.unsupported }
+        return reminder
+    }
+
+    private func setDue(_ date: Date?, allDay: Bool, on reminder: EKReminder) {
+        reminder.dueDateComponents = date.map {
+            Calendar.current.dateComponents(allDay ? [.year, .month, .day] : [.year, .month, .day, .hour, .minute], from: $0)
+        }
+    }
+
+    private func save(_ reminder: EKReminder) throws {
+        try store.save(reminder, commit: true)
+        taskCache[reminder.calendarItemIdentifier] = Self.taskItem(
+            from: reminder, containers: Dictionary(uniqueKeysWithValues: listCache.map { ($0.id, $0) })
+        )
     }
 
     private var hasAccess: Bool {
