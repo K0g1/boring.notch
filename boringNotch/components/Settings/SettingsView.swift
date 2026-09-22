@@ -1813,6 +1813,7 @@ struct Shortcuts: View {
         Form {
             ShortcutFavoritesSettings()
             Section("Tasks") {
+                KeyboardShortcuts.Recorder("Timer & Focus:", name: .focusSession)
                 KeyboardShortcuts.Recorder("Quick Task Capture:", name: .quickTaskCapture)
             }
             Section {

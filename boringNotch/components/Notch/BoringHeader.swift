@@ -38,6 +38,15 @@ struct BoringHeader: View {
 
             HStack(spacing: 4) {
                 if vm.notchState == .open {
+                    Button {
+                        FocusSessionStore.shared.showingControls.toggle()
+                        coordinator.currentView = .home
+                    } label: {
+                        Image(systemName: "timer").frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Timer & Focus")
+                    .accessibilityLabel("Timer and focus controls")
                     if Defaults[.showMirror] {
                         Button(action: {
                             vm.toggleCameraPreview()

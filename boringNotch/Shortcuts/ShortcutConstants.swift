@@ -9,6 +9,7 @@ import KeyboardShortcuts
 import SwiftUI
 
 extension KeyboardShortcuts.Name {
+    static let focusSession = Self("focusSession", default: .init(.f, modifiers: [.command, .option]))
     static let quickTaskCapture = Self("quickTaskCapture", default: .init(.t, modifiers: [.command, .option]))
     static let clipboardHistoryPanel = Self("clipboardHistoryPanel", default: .init(.c, modifiers: [.shift, .command]))
     static let toggleMicrophone = Self("toggleMicrophone", default: .init(.f5, modifiers: [.function]))

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        F02000000000000000000001 /* FocusSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01000000000000000000001 /* FocusSessionStore.swift */; };
+        F02000000000000000000002 /* FocusSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01000000000000000000002 /* FocusSessionView.swift */; };
 		A20000000000000000000005 /* QuickTaskCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* QuickTaskCapture.swift */; };
 		A20000000000000000000006 /* TaskRowActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006 /* TaskRowActions.swift */; };
 		D62000000000000000000001 /* ShortcutFavoritesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61000000000000000000001 /* ShortcutFavoritesStore.swift */; };
@@ -195,6 +197,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        F01000000000000000000001 /* FocusSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionStore.swift; sourceTree = "<group>"; };
+        F01000000000000000000002 /* FocusSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionView.swift; sourceTree = "<group>"; };
 		A10000000000000000000005 /* QuickTaskCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickTaskCapture.swift; sourceTree = "<group>"; };
 		A10000000000000000000006 /* TaskRowActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRowActions.swift; sourceTree = "<group>"; };
 		D61000000000000000000001 /* ShortcutFavoritesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutFavoritesStore.swift; sourceTree = "<group>"; };
@@ -542,6 +546,7 @@
 		147163B52C5D804B0068B555 /* managers */ = {
 			isa = PBXGroup;
 			children = (
+                F01000000000000000000001 /* FocusSessionStore.swift */,
 				D61000000000000000000001 /* ShortcutFavoritesStore.swift */,
 				A10000000000000000000004 /* TaskStore.swift */,
 				11D58EA12E760AE100FA8377 /* ImageService.swift */,
@@ -752,6 +757,7 @@
 		B186542F2C6F455E000B926A /* Notch */ = {
 			isa = PBXGroup;
 			children = (
+                F01000000000000000000002 /* FocusSessionView.swift */,
 				D61000000000000000000003 /* ShortcutFavoritesRow.swift */,
 				1194E8862EA6DDA7009C82D6 /* BoringNotchSkyLightWindow.swift */,
 				1160F8D72DD98230006FBB94 /* NotchShape.swift */,
@@ -998,6 +1004,8 @@
 				A20000000000000000000002 /* AppleRemindersProvider.swift in Sources */,
 				A20000000000000000000003 /* TodoistProvider.swift in Sources */,
 				A20000000000000000000004 /* TaskStore.swift in Sources */,
+                F02000000000000000000001 /* FocusSessionStore.swift in Sources */,
+                F02000000000000000000002 /* FocusSessionView.swift in Sources */,
 				14C08BB92C8DE4B1000F8AA0 /* BoringCalendar.swift in Sources */,
 				A20000000000000000000005 /* QuickTaskCapture.swift in Sources */,
 				A20000000000000000000006 /* TaskRowActions.swift in Sources */,

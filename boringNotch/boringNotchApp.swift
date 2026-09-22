@@ -31,6 +31,7 @@ struct DynamicNotchApp: App {
     var body: some Scene {
         MenuBarExtra("boring.notch", systemImage: "sparkle", isInserted: $showMenuBarIcon) {
             Button("New Task…") { TaskCaptureController.shared.show() }
+            Button("Timer & Focus…") { appDelegate.showFocusSession() }
             Button("Settings") {
                 SettingsWindowController.shared.showWindow()
             }
@@ -65,6 +66,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var isScreenLocked: Bool = false
     private var windowScreenDidChangeObserver: Any?
     private var dragDetectors: [String: DragDetector] = [:] // UUID -> DragDetector
+
+    @MainActor
+    func showFocusSession() {
+        closeNotchTask?.cancel()
+        closeNotchTask = nil
+        FocusSessionStore.shared.showingControls = true
+        coordinator.currentView = .home
+        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+        let target = Defaults[.showOnAllDisplays]
+            ? (screen?.displayUUID.flatMap { viewModels[$0] } ?? vm) : vm
+        target.open()
+    }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
@@ -358,6 +371,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         KeyboardShortcuts.onKeyDown(for: .quickTaskCapture) {
             Task { @MainActor in TaskCaptureController.shared.show() }
+        }
+
+        KeyboardShortcuts.onKeyDown(for: .focusSession) { [weak self] in
+            Task { @MainActor [weak self] in self?.showFocusSession() }
         }
 
         KeyboardShortcuts.onKeyDown(for: .toggleSneakPeek) { [weak self] in

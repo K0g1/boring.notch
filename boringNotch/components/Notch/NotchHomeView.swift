@@ -469,6 +469,7 @@ struct VolumeControlView: View {
 // MARK: - Main View
 
 struct NotchHomeView: View {
+    @ObservedObject private var focusSession = FocusSessionStore.shared
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
@@ -478,8 +479,12 @@ struct NotchHomeView: View {
         Group {
             if !coordinator.firstLaunch {
                 VStack(spacing: 6) {
-                    mainContent
-                    ShortcutFavoritesRow()
+                    if focusSession.showingControls {
+                        FocusSessionView()
+                    } else {
+                        mainContent
+                        ShortcutFavoritesRow()
+                    }
                 }
             }
         }

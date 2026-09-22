@@ -18,6 +18,7 @@ struct ContentView: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
+    @ObservedObject private var focusSession = FocusSessionStore.shared
     @ObservedObject private var shortcutFavorites = ShortcutFavoritesStore.shared
     @AppStorage("showShortcutFavorites") private var showShortcutFavorites = true
     @State private var hoverTask: Task<Void, Never>?
@@ -68,6 +69,8 @@ struct ContentView: View {
             && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
         {
             chinWidth = 640
+        } else if focusSession.session != nil && vm.notchState == .closed && !vm.hideOnClosed {
+            chinWidth += 180
         } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
             && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle)
             && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
@@ -296,6 +299,19 @@ struct ContentView: View {
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
+                      } else if focusSession.session != nil && vm.notchState == .closed && !vm.hideOnClosed {
+                          HStack(spacing: 0) {
+                              Image(systemName: "timer").foregroundStyle(.orange).frame(width: 90)
+                              Color.clear.frame(width: vm.closedNotchSize.width - 20)
+                              FocusSessionReadout(compact: true).frame(width: 90)
+                          }
+                          .frame(height: vm.effectiveClosedNotchHeight)
+                          .contentShape(Rectangle())
+                          .onTapGesture {
+                              focusSession.showingControls = true
+                              coordinator.currentView = .home
+                              vm.open()
+                          }
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                           MusicLiveActivity()
                               .frame(alignment: .center)
