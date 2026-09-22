@@ -157,9 +157,12 @@ final class FocusSessionStore: ObservableObject {
             content.sound = .default
             let request = UNNotificationRequest(identifier: identifier, content: content,
                 trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, deadline.timeIntervalSinceNow), repeats: false))
-            // Enqueue synchronously after the cancellation check. A later pause/cancel
-            // can then reliably remove this request without racing an async add.
-            center.add(request, withCompletionHandler: nil)
+            do {
+                try await center.add(request)
+            } catch {
+                // Notification delivery is best effort; the in-notch timer remains
+                // authoritative even when notification permission or scheduling fails.
+            }
         }
     }
 }
