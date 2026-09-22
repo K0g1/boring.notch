@@ -12,14 +12,16 @@ struct BoringHeader: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
-    @StateObject var tvm = ShelfStateViewModel.shared
+    @Default(.boringShelf) private var shelfEnabled
     var body: some View {
         HStack(spacing: 0) {
             HStack {
-                if (!tvm.isEmpty || coordinator.alwaysShowTabs) && Defaults[.boringShelf] {
-                    TabSelectionView()
-                } else if vm.notchState == .open {
-                    EmptyView()
+                if shelfEnabled {
+                    if coordinator.alwaysShowTabs {
+                        TabSelectionView()
+                    } else {
+                        ShelfContentTabs()
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,6 +103,15 @@ struct BoringHeader: View {
         }
         .foregroundColor(.gray)
         .environmentObject(vm)
+    }
+}
+
+/// Only resolve Shelf storage when its contents actually determine tab visibility.
+private struct ShelfContentTabs: View {
+    @ObservedObject private var shelf = ShelfStateViewModel.shared
+
+    var body: some View {
+        if !shelf.isEmpty { TabSelectionView() }
     }
 }
 

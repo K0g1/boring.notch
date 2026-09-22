@@ -5,6 +5,25 @@ import XCTest
 
 final class LifecycleAndCacheTests: XCTestCase {
     @MainActor
+    func testNotchViewModelsReleaseAcrossOneThousandDisplayLifecycles() {
+        for _ in 0..<1_000 {
+            weak var releasedModel: BoringViewModel?
+            autoreleasepool {
+                let model = BoringViewModel()
+                releasedModel = model
+                model.dropZoneTargeting = true
+                XCTAssertTrue(model.anyDropZoneTargeting)
+                model.dropZoneTargeting = false
+                XCTAssertFalse(model.anyDropZoneTargeting)
+            }
+            if releasedModel != nil {
+                XCTFail("A discarded display model is retained by its own subscriptions")
+                return
+            }
+        }
+    }
+
+    @MainActor
     func testBlinkControllerRemainsBoundedAcrossOneThousandCycles() {
         let controller = BlinkTaskController()
         var isBlinking = false

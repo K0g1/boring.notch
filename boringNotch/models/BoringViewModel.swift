@@ -63,7 +63,10 @@ class BoringViewModel: NSObject, ObservableObject {
             .map { shelf, drag, general in
                 shelf || drag || general
             }
-            .assign(to: \.anyDropZoneTargeting, on: self)
+            .removeDuplicates()
+            // assign(to:on:) retains its target; storing it on that same target
+            // would keep every discarded display model and its observers alive.
+            .sink { [weak self] in self?.anyDropZoneTargeting = $0 }
             .store(in: &cancellables)
         
         setupDetectorObserver()
@@ -228,7 +231,7 @@ class BoringViewModel: NSObject, ObservableObject {
 
             // Set the current view to shelf if it contains files and the user enables openShelfByDefault
             // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
-            if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
+            if Defaults[.boringShelf] && Defaults[.openShelfByDefault] && !ShelfStateViewModel.shared.isEmpty {
                 self.coordinator.currentView = .shelf
             } else if !self.coordinator.openLastTabByDefault {
                 self.coordinator.currentView = .home
