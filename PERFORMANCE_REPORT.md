@@ -10,20 +10,20 @@ This is a beta decision for the automated scope, not a claim that the unrun 30-m
 
 Both measurements were taken on the same MacBook Pro (M1 Pro, 8 CPU cores, 16 GB RAM, one built-in display) with macOS 15.7.3 and Xcode 16.4. The baseline is the unmodified v2.7.3 commit `16b0f11`; the Beta 2 capture is the Apple Development-signed universal Release app from `81b6863`. Build 27304 is the later hardening candidate.
 
-The baseline evidence is a bounded four-sample observation near 1:53 after launch. Beta 2 had a 120-second capture with 13 samples. The hardening candidate was packaged and signed as build 27304, and its clean staging app completed a 120-second capture at commit `b3e6003`. These are useful directional measurements but not statistically controlled benchmarks. `ps` supplies CPU and RSS; `vmmap -summary` supplies physical footprint. Raw evidence is under `Performance/Baseline/` and `Performance/Results/`.
+The baseline evidence is a bounded four-sample observation near 1:53 after launch. Beta 2 had a 120-second capture with 13 samples. The hardening candidate was packaged and signed as build 27304, and its exact clean staging app completed a 120-second capture at commit `4927660`. These are useful directional measurements but not statistically controlled benchmarks. `ps` supplies CPU and RSS; `vmmap -summary` supplies physical footprint. Raw evidence is under `Performance/Baseline/` and `Performance/Results/`.
 
 ## Before and after
 
 | Metric | v2.7.3 baseline | Optimized | Change |
 |---|---:|---:|---:|
 | Final physical footprint | 249.9 MB | 20.5 MB (Beta 2) | -229.4 MB (-91.8%) |
-| Peak physical footprint | 287.5 MB | 20.8 MB (Beta 2) | -266.7 MB (-92.8%) |
+| Peak physical footprint | 287.5 MB | 20.8 MB (Beta 2); 28.1 MB (27304) | -259.4 MB vs baseline |
 | Average RSS in captured series | 178.38 MiB | 53.54 MiB (Beta 2) | -124.85 MiB (-70.0%) |
 | Average sampled CPU, whole series | 0.925% | 0.815% (Beta 2) | -0.110 percentage points |
-| Hardening candidate physical footprint | not measured | 27.7 MB final, 27.8 MB peak | within ≤60 MB target |
-| Hardening candidate RSS, full 120-second window | not measured | 50.02 → 57.08 MiB; +7.06 MiB including startup | startup/caches included |
-| Hardening candidate RSS, stabilized 30–120 seconds | not measured | 60.81 → 57.08 MiB; -3.73 MiB | no growth after warm-up |
-| Hardening candidate stabilized CPU | not measured | 0.725% from process CPU time | within <1% target |
+| Hardening candidate physical footprint | not measured | 27.7 MB final, 28.1 MB peak | within ≤60 MB target |
+| Hardening candidate RSS, full 120-second window | not measured | 39.95 → 53.84 MiB; +13.89 MiB including startup | startup/caches included |
+| Hardening candidate RSS, stabilized 30–120 seconds | not measured | 54.00 → 53.84 MiB; -0.16 MiB | no growth after warm-up |
+| Hardening candidate stabilized CPU | not measured | 0.022% from process CPU time | within <1% target |
 | Peak thread rows | 6 | 7 | +1 |
 | Peak child processes | 1 | 1 | no change |
 
@@ -66,9 +66,9 @@ The production Release target deliberately remains non-testable. Release compila
 
 | Acceptance item | Status | Evidence or remaining work |
 |---|---|---|
-| Fresh idle physical footprint ≤60 MB preferred | passed | build 27304: 27.7 MB final, 27.8 MB peak |
-| Closed-notch idle CPU <0.5–1% | passed for bounded run | build 27304: 0.725% stabilized from 30–120 seconds |
-| 30-minute growth <5 MB | not run | 120-second stabilized growth was -3.73 MiB; a 30-minute run with the hardening feature matrix is still required |
+| Fresh idle physical footprint ≤60 MB preferred | passed | build 27304: 27.7 MB final, 28.1 MB peak |
+| Closed-notch idle CPU <0.5–1% | passed for bounded run | build 27304: 0.022% stabilized from 30–120 seconds |
+| 30-minute growth <5 MB | not run | 120-second stabilized growth was -0.16 MiB; a 30-minute run with the hardening feature matrix is still required |
 | 1,000 lifecycle cycles stable | passed for face task owner | automated start/stop test; system-wide timer count was not instrumented |
 | 100 controller switches | not run | teardown/orphan behavior passed tests and launch checks; live-controller matrix remains manual |
 | Shelf cache hard bounded | passed | unit tests for concurrency, reverse index, and icon cost |
