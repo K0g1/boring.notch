@@ -7,7 +7,7 @@
 
 import AppKit
 import Foundation
-import QuickLookThumbnailing
+@preconcurrency import QuickLookThumbnailing
 
 actor ThumbnailGenerationLimiter {
     private let limit: Int
@@ -103,78 +103,120 @@ struct ThumbnailCacheIndex {
 actor ThumbnailService {
     static let shared = ThumbnailService()
 
+    private struct PendingRequest {
+        let id = UUID()
+        let url: URL
+        let task: Task<CGImage?, Never>
+        var consumers: Set<UUID>
+    }
+
     private let cache = NSCache<NSString, CGImage>()
     private var cacheIndex = ThumbnailCacheIndex(countLimit: 100)
-    private var pendingRequests: [String: Task<CGImage?, Never>] = [:]
-    private let thumbnailGenerator = QLThumbnailGenerator.shared
+    private var pendingRequests: [String: PendingRequest] = [:]
+    private let generate: @Sendable (URL, CGSize, CGFloat) async -> CGImage?
     private let generationLimiter = ThumbnailGenerationLimiter(limit: 4)
-    private let memoryPressureSource: DispatchSourceMemoryPressure
+    private var memoryPressureSource: DispatchSourceMemoryPressure?
     private static let cacheCountLimit = 100
 
-    private init() {
+    init(
+        generate: @escaping @Sendable (URL, CGSize, CGFloat) async -> CGImage? = {
+            await ThumbnailService.generateQuickLookThumbnail($0, $1, $2)
+        },
+        observesMemoryPressure: Bool = true
+    ) {
+        self.generate = generate
         cache.countLimit = Self.cacheCountLimit
         cache.totalCostLimit = 20 * 1024 * 1024
 
+        guard observesMemoryPressure else { return }
         let source = DispatchSource.makeMemoryPressureSource(
             eventMask: [.warning, .critical],
             queue: .global(qos: .utility)
         )
         memoryPressureSource = source
-        source.setEventHandler {
-            Task { await ThumbnailService.shared.clearCache() }
+        source.setEventHandler { [weak self] in
+            Task { await self?.clearCache() }
         }
         source.resume()
     }
 
+    deinit {
+        memoryPressureSource?.cancel()
+        for request in pendingRequests.values { request.task.cancel() }
+    }
+
     func thumbnail(for url: URL, size: CGSize) async -> CGImage? {
         let scale = await MainActor.run { NSScreen.main?.backingScaleFactor ?? 2 }
+        guard !Task.isCancelled else { return nil }
         let key = Self.cacheKey(for: url, size: size, scale: scale)
         let cacheKey = key as NSString
 
         if let cachedImage = cache.object(forKey: cacheKey) {
             return cachedImage
         }
-        if let pending = pendingRequests[key] {
-            return await pending.value
-        }
-
-        let generator = thumbnailGenerator
-        let limiter = generationLimiter
-        let task = Task.detached(priority: .utility) {
-            await limiter.withPermit {
-                await Self.generateQuickLookThumbnail(
-                    for: url,
-                    size: size,
-                    scale: scale,
-                    generator: generator
-                )
+        let consumer = UUID()
+        let request: PendingRequest
+        if var pending = pendingRequests[key] {
+            pending.consumers.insert(consumer)
+            request = pending
+        } else {
+            let generate = generate
+            let limiter = generationLimiter
+            let task = Task.detached(priority: .utility) { () -> CGImage? in
+                await limiter.withPermit {
+                    guard !Task.isCancelled else { return nil }
+                    return await generate(url, size, scale)
+                }
             }
+            request = PendingRequest(url: url.standardizedFileURL, task: task, consumers: [consumer])
         }
-        pendingRequests[key] = task
+        pendingRequests[key] = request
 
-        let thumbnail = await task.value
-        pendingRequests[key] = nil
-
-        if let thumbnail {
-            let cost = thumbnail.bytesPerRow * thumbnail.height
-            cache.setObject(thumbnail, forKey: cacheKey, cost: cost)
-            for evictedKey in cacheIndex.record(
-                key: key,
-                for: url.standardizedFileURL
-            ) {
-                cache.removeObject(forKey: evictedKey as NSString)
+        return await withTaskCancellationHandler {
+            let thumbnail = await request.task.value
+            guard !request.task.isCancelled, !Task.isCancelled else { return nil }
+            // Only the first completed consumer populates the cache. Invalidated
+            // requests cannot remove or overwrite a newer request for the same URL.
+            if pendingRequests[key]?.id == request.id {
+                pendingRequests[key] = nil
+                if let thumbnail {
+                    let cost = thumbnail.bytesPerRow * thumbnail.height
+                    cache.setObject(thumbnail, forKey: cacheKey, cost: cost)
+                    for evictedKey in cacheIndex.record(key: key, for: request.url) {
+                        cache.removeObject(forKey: evictedKey as NSString)
+                    }
+                }
             }
+            return thumbnail
+        } onCancel: {
+            Task { await self.removeConsumer(consumer, key: key, requestID: request.id) }
         }
-        return thumbnail
+    }
+
+    private func removeConsumer(_ consumer: UUID, key: String, requestID: UUID) {
+        guard var request = pendingRequests[key], request.id == requestID else { return }
+        request.consumers.remove(consumer)
+        if request.consumers.isEmpty {
+            request.task.cancel()
+            pendingRequests[key] = nil
+        } else {
+            pendingRequests[key] = request
+        }
     }
 
     func clearCache() {
+        for request in pendingRequests.values { request.task.cancel() }
+        pendingRequests.removeAll()
         cache.removeAllObjects()
         cacheIndex.removeAll()
     }
 
     func clearCache(for url: URL) {
         let normalizedURL = url.standardizedFileURL
+        for (key, request) in pendingRequests where request.url == normalizedURL {
+            request.task.cancel()
+            pendingRequests[key] = nil
+        }
         for key in cacheIndex.remove(url: normalizedURL) {
             cache.removeObject(forKey: key as NSString)
         }
@@ -186,11 +228,10 @@ actor ThumbnailService {
         return "\(url.standardizedFileURL.path)|\(pixelWidth)x\(pixelHeight)@\(scale)"
     }
 
-    private nonisolated static func generateQuickLookThumbnail(
-        for url: URL,
-        size: CGSize,
-        scale: CGFloat,
-        generator: QLThumbnailGenerator
+    nonisolated static func generateQuickLookThumbnail(
+        _ url: URL,
+        _ size: CGSize,
+        _ scale: CGFloat
     ) async -> CGImage? {
         await url.accessSecurityScopedResource { scopedURL -> CGImage? in
             let request = QLThumbnailGenerator.Request(
@@ -201,8 +242,14 @@ actor ThumbnailService {
             )
             request.iconMode = true
 
-            let representation = try? await generator.generateBestRepresentation(for: request)
-            return representation?.cgImage
+            let generator = QLThumbnailGenerator.shared
+            return await withTaskCancellationHandler {
+                guard !Task.isCancelled else { return nil }
+                let representation = try? await generator.generateBestRepresentation(for: request)
+                return Task.isCancelled ? nil : representation?.cgImage
+            } onCancel: {
+                generator.cancel(request)
+            }
         }
     }
 }

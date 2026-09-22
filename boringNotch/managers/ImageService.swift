@@ -18,8 +18,6 @@ public final class ImageService: ImageServiceProtocol {
     public static let shared = ImageService()
 
     private let session: URLSession
-    private let maximumArtworkDimension = 512
-    private let maximumDownloadSize = 20 * 1024 * 1024
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -47,18 +45,28 @@ public final class ImageService: ImageServiceProtocol {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
             throw URLError(.unsupportedURL)
         }
-        let (data, response) = try await session.data(from: url)
+        // Download to disk so a misbehaving server cannot allocate an unbounded Data
+        // buffer before the size check. Only accepted artwork is read into memory.
+        let (file, response) = try await session.download(from: url)
+        defer { try? FileManager.default.removeItem(at: file) }
         guard let response = response as? HTTPURLResponse,
               (200..<300).contains(response.statusCode) else {
             throw URLError(.badServerResponse)
         }
-        guard data.count <= maximumDownloadSize else {
+        try Task.checkCancellation()
+        return try Self.readDownloadedArtwork(from: file)
+    }
+
+    static func readDownloadedArtwork(from file: URL) throws -> Data {
+        let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        guard let size, size <= 20 * 1024 * 1024 else {
             throw URLError(.dataLengthExceedsMaximum)
         }
+        let data = try Data(contentsOf: file, options: .mappedIfSafe)
 
         return try Self.downsampledImageData(
             data,
-            maximumPixelSize: maximumArtworkDimension
+            maximumPixelSize: 512
         )
     }
 

@@ -82,6 +82,15 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
         presentationName ?? Self.makeDisplayName(for: kind)
     }
 
+    func matchesSearch(_ query: String) -> Bool {
+        if query.isEmpty || displayName.localizedStandardContains(query) { return true }
+        switch kind {
+        case .text(let text): return text.localizedStandardContains(query)
+        case .link(let url): return url.absoluteString.localizedStandardContains(query)
+        case .file: return false
+        }
+    }
+
     mutating func preparePresentationMetadata() {
         if addedAt == nil { addedAt = Date() }
         if presentationName == nil {
@@ -135,7 +144,11 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
             }
             return (try? resolvedURL.resourceValues(forKeys: [.localizedNameKey]).localizedName) ?? resolvedURL.lastPathComponent
         case .text(let string):
-            return string.trimmingCharacters(in: .whitespacesAndNewlines)
+            // A clipboard payload can be a megabyte. Only a short title belongs in the UI
+            // and persistence metadata; dragging/copying still uses the complete payload.
+            let preview = string.prefix(80).prefix { !$0.isNewline }
+                .trimmingCharacters(in: .whitespaces)
+            return preview.isEmpty ? "Text" : preview
         case .link(let url):
             let s = url.absoluteString
             if s.hasPrefix("https://") {
@@ -162,7 +175,14 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
     
     @MainActor
     var icon: NSImage {
-        let cacheKey = identityKey as NSString
+        // Text/link icons are identical across items. Do not retain whole clipboard
+        // payloads as cache keys or render a separate bitmap for every text snippet.
+        let cacheKey: NSString
+        switch kind {
+        case .file: cacheKey = identityKey as NSString
+        case .text: cacheKey = "symbol:text"
+        case .link: cacheKey = "symbol:link"
+        }
         if let cached = Self.iconCache.object(forKey: cacheKey) {
             return cached
         }

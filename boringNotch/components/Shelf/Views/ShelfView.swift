@@ -17,7 +17,7 @@ struct ShelfView: View {
     @State private var search = ""
     private let spacing: CGFloat = 8
     private var visibleItems: [ShelfItem] {
-        tvm.items.filter { search.isEmpty || $0.displayName.localizedStandardContains(search) }
+        tvm.items.filter { $0.matchesSearch(search) }
             .sorted { $0.isPinned && !$1.isPinned }
     }
 

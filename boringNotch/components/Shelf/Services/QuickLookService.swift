@@ -49,16 +49,13 @@ final class QuickLookService: ObservableObject {
     }
 
     func hide() {
+        let panel = previewPanel
         stopAccessingCurrentURLs()
         selectedURL = nil
         urls.removeAll()
         isQuickLookOpen = false
-        if let panel = previewPanel, panel.isVisible {
+        if let panel, panel.isVisible {
             panel.orderOut(nil)
-        }
-        if let panel = previewPanel {
-            NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: panel)
-            previewPanel = nil
         }
     }
     
