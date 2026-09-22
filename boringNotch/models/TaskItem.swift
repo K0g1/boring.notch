@@ -139,7 +139,7 @@ extension TaskProvider {
     func tasks(in interval: DateInterval) async -> [TaskItem] {
         await cachedTasks().filter { task in
             guard let due = task.due else { return false }
-            return interval.contains(due)
+            return due >= interval.start && due < interval.end
         }
     }
 }

@@ -20,7 +20,13 @@ enum AppleRemindersError: LocalizedError {
     }
 }
 
-actor AppleRemindersProvider: TaskProvider {
+protocol AppleRemindersProviding: TaskProvider {
+    func authorizationStatus() -> EKAuthorizationStatus
+    func requestAccess() async throws -> Bool
+    func clearCache() async
+}
+
+actor AppleRemindersProvider: AppleRemindersProviding {
     nonisolated let supportsEditing = true
     private let store: EKEventStore
     private var taskCache: [String: TaskItem] = [:]
@@ -78,6 +84,12 @@ actor AppleRemindersProvider: TaskProvider {
 
     func cachedTasks() -> [TaskItem] {
         Array(taskCache.values)
+    }
+
+    func clearCache() {
+        taskCache.removeAll()
+        listCache.removeAll()
+        lastRefresh = nil
     }
 
     func containers() -> [TaskContainer] {

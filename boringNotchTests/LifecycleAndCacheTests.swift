@@ -108,6 +108,13 @@ final class LifecycleAndCacheTests: XCTestCase {
                     color: .todoistRed
                 ),
                 TaskItem(
+                    providerID: "next-day-boundary",
+                    source: .todoist,
+                    title: "Exactly at the interval end",
+                    due: interval.end,
+                    color: .todoistRed
+                ),
+                TaskItem(
                     providerID: "undated",
                     source: .todoist,
                     title: "Undated",

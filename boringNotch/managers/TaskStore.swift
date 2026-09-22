@@ -23,17 +23,18 @@ final class TaskStore: ObservableObject {
     @Published private(set) var lastError: String?
     @Published private(set) var isMutating = false
 
-    private let appleProvider: AppleRemindersProvider
+    private let appleProvider: any AppleRemindersProviding
     private let todoistProvider: TodoistProvider
     private var refreshTask: Task<Void, Never>?
     private var appActivityTask: Task<Void, Never>?
     private var visibleRefreshTask: Task<Void, Never>?
     private var eventStoreObserver: NSObjectProtocol?
+    private var eventStoreRefreshTask: Task<Void, Never>?
     private var visibleConsumerCount = 0
     private var hasStarted = false
 
     init(
-        appleProvider: AppleRemindersProvider = AppleRemindersProvider(),
+        appleProvider: any AppleRemindersProviding = AppleRemindersProvider(),
         todoistProvider: TodoistProvider = TodoistProvider()
     ) {
         self.appleProvider = appleProvider
@@ -44,6 +45,7 @@ final class TaskStore: ObservableObject {
         refreshTask?.cancel()
         appActivityTask?.cancel()
         visibleRefreshTask?.cancel()
+        eventStoreRefreshTask?.cancel()
         if let eventStoreObserver {
             NotificationCenter.default.removeObserver(eventStoreObserver)
         }
@@ -60,7 +62,7 @@ final class TaskStore: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                await self?.refresh(force: true)
+                self?.scheduleReminderRefresh()
             }
         }
 
@@ -106,6 +108,26 @@ final class TaskStore: ObservableObject {
     }
 
     func refresh(force: Bool) async {
+        await refresh(force: force, refreshTodoist: true)
+    }
+
+    /// EventKit notifications also arrive for Calendar edits. Collapse bursts and
+    /// refresh only Reminders; they cannot invalidate a Todoist network snapshot.
+    private func scheduleReminderRefresh() {
+        eventStoreRefreshTask?.cancel()
+        eventStoreRefreshTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            if let refresh = self?.refreshTask { await refresh.value }
+            // A provider save emits its notification before the mutation has finished.
+            while self?.isMutating == true {
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+            }
+            guard !Task.isCancelled else { return }
+            await self?.refresh(force: true, refreshTodoist: false)
+        }
+    }
+
+    private func refresh(force: Bool, refreshTodoist: Bool) async {
         guard !isMutating else { return }
         if let refreshTask {
             await refreshTask.value
@@ -114,7 +136,7 @@ final class TaskStore: ObservableObject {
 
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.performRefresh(force: force)
+            await self.performRefresh(force: force, refreshTodoist: refreshTodoist)
         }
         refreshTask = task
         await task.value
@@ -277,15 +299,13 @@ final class TaskStore: ObservableObject {
         return tasks
             .filter { task in
                 guard let due = task.due else { return false }
-                return interval.contains(due)
+                return due >= interval.start && due < interval.end
             }
-            .sorted(by: Self.taskSort)
     }
 
     var undatedTodoistTasks: [TaskItem] {
         tasks
             .filter { $0.source == .todoist && $0.due == nil }
-            .sorted(by: Self.taskSort)
     }
 
     func isReminderListSelected(_ container: TaskContainer) -> Bool {
@@ -334,9 +354,9 @@ final class TaskStore: ObservableObject {
         rebuildVisibleTasks()
     }
 
-    private func performRefresh(force: Bool) async {
+    private func performRefresh(force: Bool, refreshTodoist: Bool) async {
         isRefreshing = true
-        lastError = nil
+        if refreshTodoist { lastError = nil }
         reminderAuthorizationStatus = appleProvider.authorizationStatus()
         isTodoistConnected = await todoistProvider.isConnected()
 
@@ -346,9 +366,11 @@ final class TaskStore: ObservableObject {
             } catch {
                 lastError = error.localizedDescription
             }
+        } else {
+            await appleProvider.clearCache()
         }
 
-        if isTodoistConnected {
+        if refreshTodoist, isTodoistConnected {
             do {
                 try await todoistProvider.refresh(force: force)
             } catch {
@@ -377,8 +399,8 @@ final class TaskStore: ObservableObject {
             todoistContainers
         )
 
-        reminderLists = snapshots.2
-        todoistProjects = snapshots.3
+        if reminderLists != snapshots.2 { reminderLists = snapshots.2 }
+        if todoistProjects != snapshots.3 { todoistProjects = snapshots.3 }
         if let selectedProjectIDs = Defaults[.selectedTodoistProjectIDs] {
             let availableIDs = Set(todoistProjects.map(\.id))
             let validSelection = selectedProjectIDs.filter(availableIDs.contains)
@@ -394,23 +416,26 @@ final class TaskStore: ObservableObject {
     private var sourceTasks: [TaskItem] = []
 
     private func rebuildVisibleTasks() {
-        tasks = sourceTasks.filter { task in
+        let reminderSelection = Defaults[.reminderSelectionState]
+        let todoistSelection = Defaults[.selectedTodoistProjectIDs].map(Set.init)
+        let visibleTasks = sourceTasks.filter { task in
             guard let containerID = task.containerID else { return true }
             switch task.source {
             case .appleReminders:
-                switch Defaults[.reminderSelectionState] {
+                switch reminderSelection {
                 case .all:
                     return true
                 case .selected(let identifiers):
                     return identifiers.contains(containerID)
                 }
             case .todoist:
-                guard let selected = Defaults[.selectedTodoistProjectIDs] else {
+                guard let selected = todoistSelection else {
                     return true
                 }
                 return selected.contains(containerID)
             }
-        }
+        }.sorted(by: Self.taskSort)
+        if tasks != visibleTasks { tasks = visibleTasks }
     }
 
     private static func taskSort(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
@@ -422,10 +447,13 @@ final class TaskStore: ObservableObject {
         case (nil, _?):
             return false
         default:
-            if lhs.priority != rhs.priority {
-                return (lhs.priority ?? .normal) > (rhs.priority ?? .normal)
+            let leftPriority = lhs.priority ?? .normal
+            let rightPriority = rhs.priority ?? .normal
+            if leftPriority != rightPriority {
+                return leftPriority > rightPriority
             }
-            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+            let order = lhs.title.localizedStandardCompare(rhs.title)
+            return order == .orderedSame ? lhs.id < rhs.id : order == .orderedAscending
         }
     }
 }
