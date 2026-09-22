@@ -2,30 +2,30 @@
 
 ## Decision
 
-The measured signed Release build meets the requested fresh-idle memory target and the closed-notch stabilized CPU target on the available Apple Silicon machine. Its two-minute idle window plateaued after startup: RSS changed by 0.156 MiB from 30 to 120 seconds and the average sampled CPU over that stabilized window was 0.05%. This evidence supports a beta release; it is not a production/notarization sign-off.
+The measured signed Release build meets the requested fresh-idle memory target and the closed-notch stabilized CPU target on the available Apple Silicon machine. The hardening work also adds regression coverage for a reproduced notch-model retain cycle, calendar request races, stale agenda rows, Shelf cancellation, bounded artwork, and local-only Reminder invalidation. This evidence supports a beta release; it is not a production/notarization sign-off.
 
 This is a beta decision for the automated scope, not a claim that the unrun 30-minute, multi-display, live-media, or real-Todoist scenarios passed.
 
 ## Measurement context
 
-Both measurements were taken on the same MacBook Pro (M1 Pro, 8 CPU cores, 16 GB RAM, one built-in display) with macOS 15.7.3 and Xcode 16.4. The baseline is the unmodified v2.7.3 commit `16b0f11`; the optimized capture is the Apple Development-signed universal Release app from `81b6863`.
+Both measurements were taken on the same MacBook Pro (M1 Pro, 8 CPU cores, 16 GB RAM, one built-in display) with macOS 15.7.3 and Xcode 16.4. The baseline is the unmodified v2.7.3 commit `16b0f11`; the Beta 2 capture is the Apple Development-signed universal Release app from `81b6863`. Build 27304 is the later hardening candidate.
 
-The baseline evidence is a bounded four-sample observation near 1:53 after launch. The optimized evidence is a 120-second capture with 13 samples at 10-second intervals, including startup. They are useful directional measurements but not a statistically controlled benchmark. `ps` supplies CPU and RSS; `vmmap -summary` supplies physical footprint. Raw evidence is under `Performance/Baseline/` and `Performance/Results/`.
+The baseline evidence is a bounded four-sample observation near 1:53 after launch. Beta 2 had a 120-second capture with 13 samples. The hardening candidate was packaged and signed as build 27304; its fresh capture should be repeated with the final artifact after installation on the target machine. These are useful directional measurements but not statistically controlled benchmarks. `ps` supplies CPU and RSS; `vmmap -summary` supplies physical footprint. Raw evidence is under `Performance/Baseline/` and `Performance/Results/`.
 
 ## Before and after
 
 | Metric | v2.7.3 baseline | Optimized | Change |
 |---|---:|---:|---:|
-| Final physical footprint | 249.9 MB | 20.5 MB | -229.4 MB (-91.8%) |
-| Peak physical footprint | 287.5 MB | 20.8 MB | -266.7 MB (-92.8%) |
-| Average RSS in captured series | 178.38 MiB | 53.54 MiB | -124.85 MiB (-70.0%) |
-| Average sampled CPU, whole series | 0.925% | 0.815% | -0.110 percentage points |
-| Stabilized CPU, 30–120 seconds | not measured | 0.05% | not comparable |
-| Stabilized RSS growth, 30–120 seconds | not measured | +0.156 MiB | not comparable |
+| Final physical footprint | 249.9 MB | 20.5 MB (Beta 2) | -229.4 MB (-91.8%) |
+| Peak physical footprint | 287.5 MB | 20.8 MB (Beta 2) | -266.7 MB (-92.8%) |
+| Average RSS in captured series | 178.38 MiB | 53.54 MiB (Beta 2) | -124.85 MiB (-70.0%) |
+| Average sampled CPU, whole series | 0.925% | 0.815% (Beta 2) | -0.110 percentage points |
+| Hardening candidate physical footprint | not measured | 28.5 MB in an earlier 180-second run | requires a clean final-artifact capture |
+| Hardening candidate RSS growth | not measured | -2.578 MiB in that earlier run | requires a clean final-artifact capture |
 | Peak thread rows | 6 | 7 | +1 |
 | Peak child processes | 1 | 1 | no change |
 
-The optimized whole-series CPU average includes a 10.1% startup sample. Every sample from 10 through 110 seconds was 0.0%; the 120-second sample was 0.5%. The baseline RSS fell by 42.64 MiB during its short sample window because of a memory purge, so that value is not presented as a growth comparison.
+The optimized whole-series CPU average includes startup. The hardening profiler now records cumulative process CPU time and reports the stabilized interval separately; this prevents one `ps` sample from being mistaken for sustained idle work. The baseline RSS fell by 42.64 MiB during its short sample window because of a memory purge, so that value is not presented as a growth comparison.
 
 ## Resource stability evidence
 
@@ -49,10 +49,12 @@ The optimized whole-series CPU average includes a 10.1% startup sample. Every sa
 
 ## Automated tests
 
-The signed Debug app-hosted suite passed 21 of 21 tests:
+The signed Debug app-hosted suite passed 38 of 38 tests:
 
 - 3 animation policy tests, covering the 0.25×–3.0× clamp, predictable open/close response scaling, and disabled-animation transactions;
-- 5 lifecycle/cache/task-filter tests, including the 1,000-cycle face test and bounded Shelf behavior;
+- lifecycle/cache/task-filter tests, including the 1,000-cycle face test, 1,000 discarded notch-model lifecycles, bounded Shelf behavior, thumbnail cancellation, and artwork size limits;
+- calendar regression tests for rapid date changes, cancellation, out-of-order results, independent display days, empty calendar selection, recurring occurrence IDs, and coalesced EventKit notifications;
+- task refresh regression tests for keeping local EventKit notifications out of Todoist sync and avoiding unchanged task publications;
 - 7 Todoist HTTP client tests, covering request shape, close/reopen endpoints, authentication errors, malformed data, typed status errors, and bounded rate-limit retries;
 - 6 Todoist provider tests, covering full/incremental sync, deletion/rename, optimistic completion, offline cache, credential separation, refresh coalescing, and flexible payload decoding.
 
@@ -62,9 +64,9 @@ The production Release target deliberately remains non-testable. Release compila
 
 | Acceptance item | Status | Evidence or remaining work |
 |---|---|---|
-| Fresh idle physical footprint ≤60 MB preferred | passed | 20.5 MB final, 20.8 MB peak |
-| Closed-notch idle CPU <0.5–1% | passed for bounded run | 0.05% average from 30–120 seconds |
-| 30-minute growth <5 MB | not run | two-minute stabilized growth was +0.156 MiB; a 30-minute run with the beta feature matrix is still required |
+| Fresh idle physical footprint ≤60 MB preferred | passed for Beta 2 | 20.5 MB final, 20.8 MB peak |
+| Closed-notch idle CPU <0.5–1% | passed for Beta 2 bounded run | 0.05% average from 30–120 seconds |
+| 30-minute growth <5 MB | not run | a 30-minute run with the hardening feature matrix is still required |
 | 1,000 lifecycle cycles stable | passed for face task owner | automated start/stop test; system-wide timer count was not instrumented |
 | 100 controller switches | not run | teardown/orphan behavior passed tests and launch checks; live-controller matrix remains manual |
 | Shelf cache hard bounded | passed | unit tests for concurrency, reverse index, and icon cost |
@@ -73,7 +75,7 @@ The production Release target deliberately remains non-testable. Release compila
 | Long-running representative soak | not run | requires interactive fixtures and hours of wall time |
 
 The beta-specific additions were compile-checked and covered by the existing
-21-test Debug suite where they share provider/cache/lifecycle infrastructure,
+38-test Debug suite where they share provider/cache/lifecycle infrastructure,
 but the complete interactive matrix for Shortcut execution, Quick Look,
 clipboard paste, task permissions, timers, and multi-display layout remains
 manual.

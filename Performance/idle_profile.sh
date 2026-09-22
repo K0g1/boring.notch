@@ -83,10 +83,11 @@ while kill -0 "$APP_PID" 2>/dev/null; do
   NOW_EPOCH="$(date +%s)"
   ELAPSED=$((NOW_EPOCH - START_EPOCH))
   CPU="$(ps -p "$APP_PID" -o %cpu= | awk '{$1=$1; print}')"
+  CPU_TIME="$(ps -p "$APP_PID" -o time= | awk '{$1=$1; print}')"
   RSS_KB="$(ps -p "$APP_PID" -o rss= | awk '{$1=$1; print}')"
   THREADS="$(ps -M "$APP_PID" | tail -n +2 | wc -l | awk '{$1=$1; print}')"
   CHILDREN="$( (pgrep -P "$APP_PID" 2>/dev/null || true) | wc -l | awk '{$1=$1; print}')"
-  printf '%s\t%s\t%s\t%s\t%s\n' "$ELAPSED" "${CPU:-0}" "${RSS_KB:-0}" "$THREADS" "$CHILDREN" >> "$SAMPLES_FILE"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$ELAPSED" "${CPU:-0}" "${RSS_KB:-0}" "$THREADS" "$CHILDREN" "${CPU_TIME:-0}" >> "$SAMPLES_FILE"
   (( ELAPSED >= DURATION )) && break
   sleep "$INTERVAL"
 done
@@ -96,21 +97,31 @@ VM_SUMMARY="$(vmmap -summary "$APP_PID" 2>/dev/null || true)"
 PHYSICAL_MB="$(awk '/Physical footprint:/ {print $3; exit}' <<< "$VM_SUMMARY")"
 PEAK_MB="$(awk '/Physical footprint \(peak\):/ {print $4; exit}' <<< "$VM_SUMMARY")"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_BUNDLE/Contents/Info.plist")"
+EXECUTABLE_SHA="$(shasum -a 256 "$APP_BUNDLE/Contents/MacOS/$EXECUTABLE_NAME" | awk '{print $1}')"
 
-python3 - "$SAMPLES_FILE" "$OUTPUT" "$COMMIT" "$SCENARIO" "$DURATION" "$INTERVAL" "${PHYSICAL_MB:-null}" "${PEAK_MB:-null}" <<'PY'
+python3 - "$SAMPLES_FILE" "$OUTPUT" "$COMMIT" "$SCENARIO" "$DURATION" "$INTERVAL" "${PHYSICAL_MB:-null}" "${PEAK_MB:-null}" "$APP_BUILD" "$EXECUTABLE_SHA" <<'PY'
 import json
 import statistics
 import sys
 from datetime import datetime, timezone
 
-samples_path, output, commit, scenario, duration, interval, physical, peak = sys.argv[1:]
+samples_path, output, commit, scenario, duration, interval, physical, peak, app_build, executable_sha = sys.argv[1:]
+
+def cpu_seconds(value):
+    total = 0.0
+    for part in value.split(":"):
+        total = total * 60 + float(part)
+    return total
+
 rows = []
 with open(samples_path, encoding="utf-8") as handle:
     for line in handle:
-        elapsed, cpu, rss, threads, children = line.rstrip().split("\t")
+        elapsed, cpu, rss, threads, children, cpu_time = line.rstrip().split("\t")
         rows.append({
             "elapsedSeconds": int(elapsed),
             "cpuPercent": float(cpu),
+            "cpuTimeSeconds": cpu_seconds(cpu_time),
             "rssMB": int(rss) / 1024,
             "threads": int(threads),
             "childProcesses": int(children),
@@ -126,10 +137,19 @@ def megabytes(value):
         return float(value[:-1]) * units[suffix]
     return float(value)
 
+stabilized = [row for row in rows if row["elapsedSeconds"] >= 30]
+stable_cpu = None
+if len(stabilized) > 1:
+    elapsed = stabilized[-1]["elapsedSeconds"] - stabilized[0]["elapsedSeconds"]
+    if elapsed > 0:
+        stable_cpu = 100 * (stabilized[-1]["cpuTimeSeconds"] - stabilized[0]["cpuTimeSeconds"]) / elapsed
+
 result = {
     "schemaVersion": 1,
     "capturedAt": datetime.now(timezone.utc).isoformat(),
     "commit": commit,
+    "appBuild": app_build,
+    "executableSHA256": executable_sha,
     "scenario": scenario,
     "requestedDurationSeconds": int(duration),
     "sampleIntervalSeconds": int(interval),
@@ -137,6 +157,7 @@ result = {
     "physicalFootprintMB": megabytes(physical),
     "physicalFootprintPeakMB": megabytes(peak),
     "cpuAveragePercent": statistics.fmean(row["cpuPercent"] for row in rows),
+    "stabilizedCPUPercent": stable_cpu,
     "rssAverageMB": statistics.fmean(row["rssMB"] for row in rows),
     "rssFirstMB": rows[0]["rssMB"],
     "rssLastMB": rows[-1]["rssMB"],
@@ -144,7 +165,7 @@ result = {
     "threadsPeak": max(row["threads"] for row in rows),
     "childProcessesPeak": max(row["childProcesses"] for row in rows),
     "samples": rows,
-    "notes": "CPU is sampled from macOS ps %cpu; physical footprint is the final vmmap summary.",
+    "notes": "cpuAveragePercent averages ps snapshots (including startup). stabilizedCPUPercent uses cumulative process CPU time from 30 seconds onward. Physical footprint is the final vmmap summary. commit identifies the profiler checkout; appBuild and executableSHA256 identify the binary.",
 }
 with open(output, "w", encoding="utf-8") as handle:
     json.dump(result, handle, indent=2, sort_keys=True)

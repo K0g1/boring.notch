@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+TEST_SCOPE=(-only-testing:boringNotchTests/LifecycleAndCacheTests)
+if [[ $# -gt 0 ]]; then
+  [[ $# -eq 1 && "$1" == "--all" ]] || { echo "usage: $0 [--all]" >&2; exit 2; }
+  TEST_SCOPE=(-only-testing:boringNotchTests)
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DERIVED_DATA="${BORING_NOTCH_TEST_DERIVED_DATA:-${TMPDIR:-/tmp}/BoringNotch-TestDerivedData-$UID}"
 SIGNING_IDENTITY="${BORING_NOTCH_SIGNING_IDENTITY:-}"
@@ -35,7 +41,8 @@ xcodebuild \
   -configuration Debug \
   -destination "platform=macOS,arch=$(uname -m)" \
   -derivedDataPath "$DERIVED_DATA" \
-  -only-testing:boringNotchTests/LifecycleAndCacheTests \
+  -parallel-testing-enabled NO \
+  "${TEST_SCOPE[@]}" \
   -allowProvisioningUpdates \
   CODE_SIGN_STYLE=Automatic \
   "CODE_SIGN_IDENTITY=Apple Development" \

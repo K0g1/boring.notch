@@ -1,10 +1,10 @@
 # BoringNotch Optimized build information
 
-## Beta 1
+## Post-Beta 2 hardening candidate
 
 - Upstream baseline: `TheBoredTeam/boring.notch` v2.7.3, commit `16b0f11f51c79d42e27c10d77fd9e53c11410fdb`
-- Optimized source used for the packaged binary: `44b780e`
-- Version: `2.7.3` (`CFBundleVersion` `27302`)
+- Production-code revision used for the packaged binary: `10b3150` (build metadata and verification reports follow on the same branch)
+- Version: `2.7.3` (`CFBundleVersion` `27304`)
 - Main bundle identifier: `com.k0g1.boringnotch.optimized`
 - XPC bundle identifier: `com.k0g1.boringnotch.optimized.BoringNotchXPCHelper`
 - Architectures: Apple Silicon and Intel (`arm64`, `x86_64`)
@@ -29,6 +29,12 @@ This beta includes favorite macOS Shortcuts, Shelf search/Quick Look/clipboard
 paste/pinning/rename/expiration controls, quick task capture and editing for
 Reminders and Todoist, timer/stopwatch/Pomodoro sessions, and optional
 per-display home layouts.
+
+Build 27304 adds per-display calendar request ownership, serial EventKit access,
+cancellable/coalesced date loads, occurrence-safe agenda rows, shared Shelf symbol
+icons, cancellable thumbnail consumers, bounded artwork ingestion, local-only
+Reminder invalidations, and explicit window/model resource cleanup. A reproduced
+Combine retain cycle is covered by a 1,000-lifecycle regression test.
 
 The script locates an Apple Development identity, resolves its team, performs a universal Release build with automatic signing, stages the app outside the OneDrive workspace, verifies aligned signing teams for the app/XPC/MediaRemote framework, and deep-verifies both the staged app and the ZIP extraction. It refuses to publish a hardened ad-hoc build because that configuration did not load the embedded media framework reliably.
 
@@ -59,11 +65,12 @@ Automatic Sparkle checks are disabled so the optimized fork cannot silently repl
 - ZIP extraction and signature verification: passed
 - Artifact checksum verification: passed
 - Signed Release launch/readiness: passed
-- Debug app-hosted XCTest suite: 21 tests passed, 0 failures
+- Debug app-hosted XCTest suite: 38 tests passed, 0 failures
 - 1,000-cycle face lifecycle stress test: passed
+- 1,000 discarded notch-model lifecycle test: passed (failed before the retain-cycle fix)
 - Post-test and post-profile orphan process check: passed
 - Release XCTest: not run by design; the production configuration keeps `ENABLE_TESTABILITY=NO`
 - Gatekeeper/notarization: not passed; requires Developer ID and notarization credentials
-- UI/privacy/media matrix and long soak: not run; see `PERFORMANCE_REPORT.md`
+- Complete UI/privacy/media matrix and long soak: not run; see `PERFORMANCE_REPORT.md`
 
 The build emits existing Swift 6 migration diagnostics while compiling in Swift 5 mode, including Sendable/MainActor warnings in AppKit and third-party boundaries. They are warnings in Xcode 16.4, not build failures, but remain future migration work.

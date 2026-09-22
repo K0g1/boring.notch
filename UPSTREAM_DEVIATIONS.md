@@ -11,7 +11,19 @@ This fork starts from upstream v2.7.3 at `16b0f11`. No upstream `dev` commit or 
 - The fork adds configurable macOS Shortcut favorites, bounded Shelf search/Quick Look/clipboard/pinning/expiration actions, provider-backed quick task capture and editing, local timer/stopwatch/Pomodoro sessions, and optional per-display home layouts.
 - A formal app-hosted XCTest target, deterministic mock networking, lifecycle/cache stress tests, performance capture scripts, repeatable run/package actions, and release verification were added.
 - Unused direct dependencies on `Pow`, `Swift Collections`, and `SwiftUI Introspect` were removed.
-- Marketing/build metadata for this beta is `2.7.3 (27302)`.
+- Marketing/build metadata for the hardening candidate is `2.7.3 (27304)`.
+
+## Post-Beta 2 hardening
+
+- Each visible agenda owns its date/results while all displays share a single actor-isolated EventKit store and calendar directory. Cancelled or superseded day loads cannot publish stale results. Calendar change notifications coalesce and invalidate visible agendas even when calendar metadata is unchanged.
+- Calendar selection supports an empty selection. Recurring occurrences have distinct row identities without changing their Calendar deep links. The agenda uses a lazy vertical scroll view instead of the AppKit-backed List involved in the calendar freeze; controls and event/task actions are preserved.
+- Date labels use Foundation's cached format style. Agenda sorting runs once per render; task snapshots sort once per refresh, use half-open date ranges, and avoid republishing unchanged task arrays.
+- Local EventKit notification bursts only refresh Reminders and no longer force Todoist network syncs. Revoked Reminders access clears cached local tasks.
+- Text/link Shelf items reuse two icon bitmaps, and text preview titles are capped at 80 characters while full text remains available for search and drag/copy. Shared thumbnails stop when the last consumer disappears; invalidation/memory pressure cancels pending work and prevents stale cache refill. Quick Look retains its panel reference long enough to close it.
+- Artwork downloads are staged on disk and checked against the existing 20 MiB limit before image decoding, then downsampled to 512 pixels. This bounds memory even if a server sends more than the allowed amount.
+- Window screen observers are removed per window; closing a window releases its hosting view. A Combine self-retain cycle in each notch model is removed. Shelf storage initializes only when the selected behavior needs its contents.
+
+No new runtime dependencies or upstream development commits were introduced.
 
 ## Identity and update policy
 

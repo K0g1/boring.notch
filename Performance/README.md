@@ -22,6 +22,15 @@ The profiler refuses to measure a process that has not completed initialization.
 
 This runs the app-hosted `LifecycleAndCacheTests`, including 1,000 face start/stop cycles, the thumbnail concurrency cap, reverse-index eviction, icon-cache cost accounting, and task filtering. It requires a locally installed Apple Development certificate because the hardened host and embedded frameworks must share a team identity.
 
+Pass `--all` to run the full signed regression suite, including calendar cancellation,
+independent display agendas, Shelf invalidation, artwork limits, and Todoist transport.
+The script disables parallel test processes because some tests temporarily change
+shared preferences and restore them afterward. An unsigned host (`CODE_SIGNING_ALLOWED=NO`)
+does not provide a reliable runtime test of the hardened embedded frameworks.
+
+`swift -O Performance/calendar_format_benchmark.swift` compares the old and current
+date-label formatting paths. This measures that operation only, not whole-app CPU.
+
 ## Build the unmodified baseline
 
 ```bash
