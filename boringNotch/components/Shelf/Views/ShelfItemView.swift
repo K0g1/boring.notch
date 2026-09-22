@@ -76,8 +76,15 @@ struct ShelfItemView: View {
             viewModel.onQuickLookRequest = { urls in
                 quickLookService.show(urls: urls, selectFirst: true)
             }
+            viewModel.onQuickLookToggle = { [weak viewModel] in
+                if quickLookService.isQuickLookOpen {
+                    quickLookService.hide()
+                } else {
+                    viewModel?.previewSelection()
+                }
+            }
         }
-        .quickLookPresenter(using: quickLookService)
+        .onChange(of: item) { _, updated in viewModel.updateItem(updated) }
     }
 
     // MARK: - View Components
@@ -89,6 +96,14 @@ struct ShelfItemView: View {
             .frame(width: 56, height: 56)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .shadow(color: .black.opacity(0.15), radius: 3, x: 0, y: 2)
+            .overlay(alignment: .topTrailing) {
+                if item.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityLabel("Pinned")
+                }
+            }
     }
 
     private var textView: some View {
@@ -195,12 +210,24 @@ private struct DraggableClickHandler<Content: View>: NSViewRepresentable {
         private let dragThreshold: CGFloat = 3.0
         private var draggedURLs: [URL] = []
         private var draggedItems: [ShelfItem] = []
+        override var acceptsFirstResponder: Bool { true }
+
+        override func keyDown(with event: NSEvent) {
+            if event.keyCode == 49, event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
+                viewModel?.onQuickLookToggle?()
+            } else {
+                super.keyDown(with: event)
+            }
+        }
+
+        @objc func paste(_ sender: Any?) { ShelfStateViewModel.shared.paste() }
         
         override func rightMouseDown(with event: NSEvent) {
             onRightClick?(event, self)
         }
         
         override func mouseDown(with event: NSEvent) {
+            window?.makeFirstResponder(self)
             mouseDownEvent = event
             onClick?(event, self)
         }
@@ -332,7 +359,7 @@ private struct DraggableClickHandler<Content: View>: NSViewRepresentable {
 
             // Auto-remove items from shelf if enabled and drag succeeded
             if Defaults[.autoRemoveShelfItems] && !operation.isEmpty {
-                for item in draggedItems {
+                for item in draggedItems where !item.isPinned {
                     ShelfStateViewModel.shared.remove(item)
                 }
             }

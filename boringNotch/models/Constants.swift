@@ -171,6 +171,7 @@ extension Defaults.Keys {
     )
     static let copyOnDrag = Key<Bool>("copyOnDrag", default: false)
     static let autoRemoveShelfItems = Key<Bool>("autoRemoveShelfItems", default: false)
+    static let shelfExpirationHours = Key<Int>("shelfExpirationHours", default: 0)
     static let expandedDragDetection = Key<Bool>("expandedDragDetection", default: true)
     
     // MARK: Calendar

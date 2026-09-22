@@ -30,12 +30,13 @@ final class QuickLookService: ObservableObject {
             if url.isFileURL {
                 return url.startAccessingSecurityScopedResource()
             }
-            return true
+            return false
         }
-        self.urls = accessingURLs
+        // Ordinary local files do not require security scope and remain previewable.
+        self.urls = urls
         self.isQuickLookOpen = true
         if selectFirst {
-            self.selectedURL = accessingURLs.first
+            self.selectedURL = urls.first
         }
         // Observe the shared Quick Look preview panel closing so we can relinquish security scope
         let panel = QLPreviewPanel.shared()

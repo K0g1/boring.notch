@@ -42,10 +42,12 @@ struct ShelfDropService {
         }
         
         if let text = await provider.extractText() {
+            guard text.utf8.count <= 1_048_576 else { return nil }
             return await ShelfItem(kind: .text(string: text), isTemporary: false)
         }
         
         if let data = await provider.loadData() {
+            guard data.count <= 20 * 1024 * 1024 else { return nil }
             if let tempDataURL = await TemporaryFileStorageService.shared.createTempFile(for: .data(data, suggestedName: provider.suggestedName)),
                let bookmark = createBookmark(for: tempDataURL) {
                 return await ShelfItem(kind: .file(bookmark: bookmark), isTemporary: true)
@@ -66,4 +68,3 @@ struct ShelfDropService {
         return (try? Bookmark(url: url))?.data
     }
 }
-

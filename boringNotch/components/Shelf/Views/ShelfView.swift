@@ -13,7 +13,12 @@ struct ShelfView: View {
     @StateObject var tvm = ShelfStateViewModel.shared
     @StateObject var selection = ShelfSelectionModel.shared
     @StateObject private var quickLookService = QuickLookService()
+    @State private var search = ""
     private let spacing: CGFloat = 8
+    private var visibleItems: [ShelfItem] {
+        tvm.items.filter { search.isEmpty || $0.displayName.localizedStandardContains(search) }
+            .sorted { $0.isPinned && !$1.isPinned }
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -30,6 +35,9 @@ struct ShelfView: View {
             updateQuickLookSelection()
         }
         .quickLookPresenter(using: quickLookService)
+        .onChange(of: search) { selection.clear() }
+        .onChange(of: tvm.items) { updateQuickLookSelection() }
+        .onDisappear { quickLookService.hide() }
     }
     
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
@@ -40,7 +48,7 @@ struct ShelfView: View {
     }
     
     private func updateQuickLookSelection() {
-        guard quickLookService.isQuickLookOpen && !selection.selectedIDs.isEmpty else { return }
+        guard quickLookService.isQuickLookOpen else { return }
         
         let selectedItems = selection.selectedItems(in: tvm.items)
         let urls: [URL] = selectedItems.compactMap { item in
@@ -55,6 +63,8 @@ struct ShelfView: View {
         
         if !urls.isEmpty {
             quickLookService.updateSelection(urls: urls)
+        } else {
+            quickLookService.hide()
         }
     }
 
@@ -78,7 +88,25 @@ struct ShelfView: View {
     }
 
     var content: some View {
-        Group {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Search shelf", text: $search)
+                    .textFieldStyle(.plain)
+                    .font(.caption)
+                Button { tvm.paste() } label: {
+                    Image(systemName: "doc.on.clipboard")
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("v", modifiers: .command)
+                .help("Paste onto Shelf (⌘V)")
+                .accessibilityLabel("Paste onto Shelf")
+            }
+            if let notice = tvm.notice {
+                Text(notice).font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .onTapGesture { tvm.notice = nil }
+            }
             if tvm.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "tray.and.arrow.down")
@@ -87,15 +115,18 @@ struct ShelfView: View {
                         .foregroundStyle(.white, .gray)
                         .imageScale(.large)
                     
-                    Text("Drop files here")
+                    Text(tvm.isLoading ? "Adding items…" : "Drop files or paste here")
                         .foregroundStyle(.gray)
                         .font(.system(.title3, design: .rounded))
                         .fontWeight(.medium)
                 }
+            } else if visibleItems.isEmpty {
+                Text("No matching items").foregroundStyle(.secondary)
+                    .frame(maxHeight: .infinity)
             } else {
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: spacing) {
-                        ForEach(tvm.items) { item in
+                        ForEach(visibleItems) { item in
                             ShelfItemView(item: item)
                                 .environmentObject(quickLookService)
                         }

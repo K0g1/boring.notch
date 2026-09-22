@@ -990,6 +990,7 @@ struct Shelf: View {
     @Default(.shelfTapToOpen) var shelfTapToOpen: Bool
     @Default(.quickShareProvider) var quickShareProvider
     @Default(.expandedDragDetection) var expandedDragDetection: Bool
+    @Default(.shelfExpirationHours) var shelfExpirationHours: Int
     @StateObject private var quickShareService = QuickShareService.shared
 
     private var selectedProvider: QuickShareProvider? {
@@ -1020,6 +1021,16 @@ struct Shelf: View {
                 Defaults.Toggle(key: .autoRemoveShelfItems) {
                     Text("Remove from shelf after dragging")
                 }
+                Picker("Remove unpinned items after", selection: $shelfExpirationHours) {
+                    Text("Never").tag(0)
+                    Text("1 hour").tag(1)
+                    Text("1 day").tag(24)
+                    Text("1 week").tag(168)
+                    Text("30 days").tag(720)
+                }
+                Text("Pinned items stay on the shelf. Removing a shelf item never deletes the original file.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
             } header: {
                 HStack {

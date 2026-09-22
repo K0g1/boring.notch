@@ -33,6 +33,21 @@ final class ShelfItemViewModel: ObservableObject {
 
     var isSelected: Bool { selection.isSelected(item.id) }
 
+    func updateItem(_ updated: ShelfItem) {
+        item = updated
+        draftTitle = updated.displayName
+    }
+
+    func previewSelection() {
+        let selected = selection.selectedItems(in: ShelfStateViewModel.shared.items)
+        let urls = selected.compactMap { item -> URL? in
+            if let file = item.fileURL { return file }
+            if case .link(let url) = item.kind { return url }
+            return nil
+        }
+        if !urls.isEmpty { onQuickLookRequest?(urls) }
+    }
+
     func loadThumbnail() async {
         guard let url = item.fileURL else { return }
         if let image = await ThumbnailService.shared.thumbnail(for: url, size: CGSize(width: 56, height: 56)) {
@@ -175,6 +190,7 @@ final class ShelfItemViewModel: ObservableObject {
 
     /// Call this closure to request a QuickLook preview for the given URLs.
     var onQuickLookRequest: (([URL]) -> Void)?
+    var onQuickLookToggle: (() -> Void)?
 
     // MARK: - Context Menu helpers (extracted from view)
     func loadOpenWithApps() -> [URL] {
@@ -355,7 +371,8 @@ final class ShelfItemViewModel: ObservableObject {
             menu.addItem(compressItem)
         }
 
-        if selectedItems.count == 1, case .file(_) = item.kind { addMenuItem(title: "Rename") }
+        if selectedItems.count == 1 { addMenuItem(title: "Rename") }
+        addMenuItem(title: selectedItems.allSatisfy(\.isPinned) ? "Unpin" : "Pin")
 
         // Always show "Copy" for all item types
         addMenuItem(title: "Copy")
@@ -455,6 +472,9 @@ final class ShelfItemViewModel: ObservableObject {
             }
 
             switch title {
+            case "Pin", "Unpin":
+                let selected = ShelfSelectionModel.shared.selectedItems(in: ShelfStateViewModel.shared.items)
+                ShelfStateViewModel.shared.setPinned(title == "Pin", for: selected)
             case "Quick Look":
                 // Handle all selected items for Quick Look, not just the clicked item
                 let selected = ShelfSelectionModel.shared.selectedItems(in: ShelfStateViewModel.shared.items)
@@ -533,7 +553,13 @@ final class ShelfItemViewModel: ObservableObject {
                         // Write to pasteboard
                         pb.writeObjects(fileURLs as [NSURL])
                     } else {
-                        let strings = selected.map { $0.displayName }
+                        let strings = selected.map { item in
+                            switch item.kind {
+                            case .text(let text): return text
+                            case .link(let url): return url.absoluteString
+                            case .file: return item.displayName
+                            }
+                        }
                         if !strings.isEmpty {
                             pb.setString(strings.joined(separator: "\n"), forType: .string)
                         }
@@ -751,7 +777,21 @@ final class ShelfItemViewModel: ObservableObject {
         
         @MainActor
         private func showRenameDialog(for item: ShelfItem) {
-            guard case let .file(bookmarkData) = item.kind else { return }
+            guard case let .file(bookmarkData) = item.kind else {
+                let alert = NSAlert()
+                alert.messageText = "Rename Shelf Item"
+                alert.informativeText = "Choose a label. The stored text or link stays unchanged."
+                let field = NSTextField(string: item.displayName)
+                field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
+                alert.accessoryView = field
+                alert.addButton(withTitle: "Rename")
+                alert.addButton(withTitle: "Cancel")
+                alert.window.initialFirstResponder = field
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+                let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !name.isEmpty { ShelfStateViewModel.shared.rename(item, to: String(name.prefix(255))) }
+                return
+            }
             Task {
                 let bookmark = Bookmark(data: bookmarkData)
                 if let fileURL = bookmark.resolveURL() {
@@ -773,9 +813,10 @@ final class ShelfItemViewModel: ObservableObject {
 
                                     if let newBookmark = try? Bookmark(url: newURL) {
                                         ShelfStateViewModel.shared.updateBookmark(for: item, bookmark: newBookmark.data)
+                                        ShelfStateViewModel.shared.rename(item, to: newURL.lastPathComponent)
                                     }
                                 } catch {
-                                    print("❌ Failed to rename file: \(error.localizedDescription)")
+                                    self.showErrorAlert(title: "Could Not Rename File", message: error.localizedDescription)
                                 }
                                 if didStart { fileURL.stopAccessingSecurityScopedResource() }
                             }

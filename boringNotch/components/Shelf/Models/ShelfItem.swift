@@ -53,6 +53,17 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
     var kind: ShelfItemKind
     var isTemporary: Bool
     private var presentationName: String?
+    // Optional storage preserves compatibility with existing shelf snapshots.
+    private var pinned: Bool?
+    private(set) var addedAt: Date?
+    var isPinned: Bool {
+        get { pinned ?? false }
+        set { pinned = newValue }
+    }
+
+    mutating func renamePresentation(to name: String) {
+        presentationName = name
+    }
 
     init(
         id: UUID = UUID(),
@@ -63,6 +74,7 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
         self.id = id
         self.kind = kind
         self.isTemporary = isTemporary
+        self.addedAt = Date()
         self.presentationName = presentationName ?? Self.makeDisplayName(for: kind)
     }
     
@@ -71,6 +83,7 @@ struct ShelfItem: Identifiable, Codable, Equatable, Sendable {
     }
 
     mutating func preparePresentationMetadata() {
+        if addedAt == nil { addedAt = Date() }
         if presentationName == nil {
             presentationName = Self.makeDisplayName(for: kind)
         }
