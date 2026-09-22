@@ -9,6 +9,7 @@ import SwiftUI
 import AppKit
 
 struct ShelfView: View {
+    var compact = false
     @EnvironmentObject var vm: BoringViewModel
     @StateObject var tvm = ShelfStateViewModel.shared
     @StateObject var selection = ShelfSelectionModel.shared
@@ -22,9 +23,11 @@ struct ShelfView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            FileShareView()
-                .aspectRatio(1, contentMode: .fit)
-                .environmentObject(vm)
+            if !compact {
+                FileShareView()
+                    .aspectRatio(1, contentMode: .fit)
+                    .environmentObject(vm)
+            }
             panel
                 .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
                     handleDrop(providers: providers)
@@ -78,7 +81,7 @@ struct ShelfView: View {
             )
             .overlay {
                 content
-                    .padding()
+                    .padding(compact ? 8 : 16)
             }
             .transaction { transaction in
                 transaction.animation = vm.animation
@@ -117,7 +120,7 @@ struct ShelfView: View {
                     
                     Text(tvm.isLoading ? "Adding items…" : "Drop files or paste here")
                         .foregroundStyle(.gray)
-                        .font(.system(.title3, design: .rounded))
+                        .font(.system(compact ? .caption : .title3, design: .rounded))
                         .fontWeight(.medium)
                 }
             } else if visibleItems.isEmpty {

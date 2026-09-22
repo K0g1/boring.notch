@@ -15,11 +15,14 @@ import SwiftUI
 struct MusicPlayerView: View {
     @EnvironmentObject var vm: BoringViewModel
     let albumArtNamespace: Namespace.ID
+    var compact = false
 
     var body: some View {
         HStack {
-            AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace).padding(.all, 5)
-            MusicControlsView().drawingGroup().compositingGroup()
+            AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace)
+                .frame(width: compact ? 54 : nil)
+                .padding(.all, 5)
+            MusicControlsView(compact: compact).drawingGroup().compositingGroup()
         }
     }
 }
@@ -154,6 +157,7 @@ struct AlbumArtView: View {
 }
 
 struct MusicControlsView: View {
+    var compact = false
     @ObservedObject var musicManager = MusicManager.shared
         @EnvironmentObject var vm: BoringViewModel
     @State private var sliderValue: Double = 0
@@ -277,6 +281,7 @@ struct MusicControlsView: View {
     }
 
     private var activeSlots: [MusicControlButton] {
+        if compact { return [.previous, .playPause, .next] }
         let sanitizedLimit = min(
             max(slotLimit, MusicControlButton.minSlotCount),
             MusicControlButton.maxSlotCount
@@ -469,6 +474,7 @@ struct VolumeControlView: View {
 // MARK: - Main View
 
 struct NotchHomeView: View {
+    @Default(.enableHomeLayout) private var customLayout
     @ObservedObject private var focusSession = FocusSessionStore.shared
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
@@ -482,7 +488,20 @@ struct NotchHomeView: View {
                     if focusSession.showingControls {
                         FocusSessionView()
                     } else {
-                        mainContent
+                        if customLayout {
+                            if shouldShowCamera {
+                                CameraPreviewView(webcamManager: .shared)
+                                    .scaledToFit()
+                                    .overlay(alignment: .topTrailing) {
+                                        Button("Close mirror") { vm.toggleCameraPreview() }
+                                            .padding(6)
+                                    }
+                            } else {
+                                HomeLayoutView(albumArtNamespace: albumArtNamespace)
+                            }
+                        } else {
+                            mainContent
+                        }
                         ShortcutFavoritesRow()
                     }
                 }

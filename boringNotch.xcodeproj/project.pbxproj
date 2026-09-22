@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        E32000000000000000000001 /* HomeLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = E31000000000000000000001 /* HomeLayout.swift */; };
+        E32000000000000000000002 /* HomeLayoutSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E31000000000000000000002 /* HomeLayoutSettings.swift */; };
+        E32000000000000000000003 /* HomeLayoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E31000000000000000000003 /* HomeLayoutView.swift */; };
         F02000000000000000000001 /* FocusSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01000000000000000000001 /* FocusSessionStore.swift */; };
         F02000000000000000000002 /* FocusSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01000000000000000000002 /* FocusSessionView.swift */; };
 		A20000000000000000000005 /* QuickTaskCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* QuickTaskCapture.swift */; };
@@ -197,6 +200,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        E31000000000000000000001 /* HomeLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = boringNotch/models/HomeLayout.swift; sourceTree = SOURCE_ROOT; };
+        E31000000000000000000002 /* HomeLayoutSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = boringNotch/components/Settings/HomeLayoutSettings.swift; sourceTree = SOURCE_ROOT; };
+        E31000000000000000000003 /* HomeLayoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = boringNotch/components/Notch/HomeLayoutView.swift; sourceTree = SOURCE_ROOT; };
         F01000000000000000000001 /* FocusSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionStore.swift; sourceTree = "<group>"; };
         F01000000000000000000002 /* FocusSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSessionView.swift; sourceTree = "<group>"; };
 		A10000000000000000000005 /* QuickTaskCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickTaskCapture.swift; sourceTree = "<group>"; };
@@ -758,6 +764,8 @@
 			isa = PBXGroup;
 			children = (
                 F01000000000000000000002 /* FocusSessionView.swift */,
+                E31000000000000000000001 /* HomeLayout.swift */,
+                E31000000000000000000003 /* HomeLayoutView.swift */,
 				D61000000000000000000003 /* ShortcutFavoritesRow.swift */,
 				1194E8862EA6DDA7009C82D6 /* BoringNotchSkyLightWindow.swift */,
 				1160F8D72DD98230006FBB94 /* NotchShape.swift */,
@@ -773,6 +781,7 @@
 			isa = PBXGroup;
 			children = (
 				D61000000000000000000002 /* ShortcutFavoritesSettings.swift */,
+                E31000000000000000000002 /* HomeLayoutSettings.swift */,
 				11F748832ECB27DC00F841DB /* MusicSlotConfigurationView.swift */,
 				11C5E3152DFE88510065821E /* SettingsView.swift */,
 				11C5E3112DFE85970065821E /* SettingsWindowController.swift */,
@@ -1006,6 +1015,9 @@
 				A20000000000000000000004 /* TaskStore.swift in Sources */,
                 F02000000000000000000001 /* FocusSessionStore.swift in Sources */,
                 F02000000000000000000002 /* FocusSessionView.swift in Sources */,
+                E32000000000000000000001 /* HomeLayout.swift in Sources */,
+                E32000000000000000000002 /* HomeLayoutSettings.swift in Sources */,
+                E32000000000000000000003 /* HomeLayoutView.swift in Sources */,
 				14C08BB92C8DE4B1000F8AA0 /* BoringCalendar.swift in Sources */,
 				A20000000000000000000005 /* QuickTaskCapture.swift in Sources */,
 				A20000000000000000000006 /* TaskRowActions.swift in Sources */,
