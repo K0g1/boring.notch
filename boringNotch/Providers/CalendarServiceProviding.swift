@@ -10,16 +10,17 @@
 import Foundation
 @preconcurrency import EventKit
 
-protocol CalendarServiceProviding {
+protocol CalendarServiceProviding: Sendable {
     func requestAccess(to type: EKEntityType) async throws -> Bool
     func calendars() async -> [CalendarModel]
     func events(from start: Date, to end: Date, calendars: [String]) async -> [EventModel]
 }
 
-class CalendarService: CalendarServiceProviding {
+/// EventKit objects stay on one executor; only presentation values leave the actor.
+actor CalendarService: CalendarServiceProviding {
+    static let shared = CalendarService()
     private let store = EKEventStore()
     
-    @MainActor
     func requestAccess(to type: EKEntityType) async throws -> Bool {
         if #available(macOS 14.0, *) {
             switch type {
@@ -50,24 +51,15 @@ class CalendarService: CalendarServiceProviding {
     }
     
     func events(from start: Date, to end: Date, calendars ids: [String]) async -> [EventModel] {
-        let allCalendars = await self.calendars()
-        let filteredCalendars = allCalendars.filter { ids.isEmpty || ids.contains($0.id) }
-        let eventStoreCalendars = store.calendars(for: .event)
-        let ekCalendars = filteredCalendars.compactMap { calendarModel in
-            eventStoreCalendars.first { $0.calendarIdentifier == calendarModel.id }
-        }
-        
-        var events: [EventModel] = []
-        
-        // Fetch regular events
-        if hasAccess(to: .event) {
-            let eventCalendars = ekCalendars.filter { store.calendars(for: .event).contains($0) }
-            let predicate = store.predicateForEvents(withStart: start, end: end, calendars: eventCalendars)
-            let ekEvents = store.events(matching: predicate)
-            events.append(contentsOf: ekEvents.compactMap { EventModel(from: $0) })
-        }
-        
-        return events.sorted { $0.start < $1.start }
+        guard !Task.isCancelled, hasAccess(to: .event), !ids.isEmpty, start < end else { return [] }
+        let selectedIDs = Set(ids)
+        let calendars = store.calendars(for: .event).filter { selectedIDs.contains($0.calendarIdentifier) }
+        // EventKit treats an empty/nil calendar filter as all calendars.
+        guard !Task.isCancelled, !calendars.isEmpty else { return [] }
+        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: calendars)
+        let events = store.events(matching: predicate)
+        guard !Task.isCancelled else { return [] }
+        return events.compactMap { EventModel(from: $0) }.sorted { $0.start < $1.start }
     }
 }
 

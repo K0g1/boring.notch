@@ -19,11 +19,10 @@ struct Config: Equatable {
 }
 
 struct WheelPicker: View {
-    @EnvironmentObject var vm: BoringViewModel
     @Binding var selectedDate: Date
     @State private var scrollPosition: Int?
     @State private var haptics: Bool = false
-    @State private var byClick: Bool = false
+    @State private var referenceDay = Calendar.current.startOfDay(for: Date())
     let config: Config
 
     var body: some View {
@@ -36,14 +35,13 @@ struct WheelPicker: View {
                     if index < spacerNum || index >= spacerNum + dateCount {
                         // Leading/trailing spacers sized to match a date cell
                         Spacer()
-                            .frame(width: 24, height: 24)
+                            .frame(width: 28, height: 24)
                             .id(index)
                     } else {
                         let date = dateForItemIndex(index: index, spacerNum: spacerNum)
                         let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDate)
                         dateButton(date: date, isSelected: isSelected, id: index) {
                             selectedDate = date
-                            byClick = true
                             withAnimation {
                                 scrollPosition = index
                             }
@@ -63,11 +61,7 @@ struct WheelPicker: View {
         .safeAreaPadding(.horizontal)
         .sensoryFeedback(.alignment, trigger: haptics)
         .onChange(of: scrollPosition) { oldValue, newValue in
-            if !byClick {
-                handleScrollChange(newValue: newValue, config: config)
-            } else {
-                byClick = false
-            }
+            handleScrollChange(newValue: newValue, config: config)
         }
         .onAppear {
             scrollToToday(config: config)
@@ -76,7 +70,6 @@ struct WheelPicker: View {
         .onChange(of: selectedDate) { _, newValue in
             let targetIndex = indexForDate(newValue)
             if scrollPosition != targetIndex {
-                byClick = true
                 withAnimation {
                     scrollPosition = targetIndex
                 }
@@ -90,11 +83,11 @@ struct WheelPicker: View {
         let isToday = Calendar.current.isDateInToday(date)
         return Button(action: onClick) {
             VStack(spacing: 8) {
-                dayText(date: dateToString(for: date), isToday: isToday, isSelected: isSelected)
+                dayText(date: date.formatted(.dateTime.weekday(.abbreviated)), isToday: isToday, isSelected: isSelected)
                 dateCircle(date: date, isToday: isToday, isSelected: isSelected)
             }
             .padding(.vertical, 4)
-            .padding(.horizontal, 4)
+            .frame(width: 28)
             .background(isSelected ? Color.effectiveAccentBackground : Color.clear)
             .cornerRadius(8)
         }
@@ -140,7 +133,7 @@ struct WheelPicker: View {
 
     private func scrollToToday(config: Config) {
         let today = Date()
-        byClick = true
+        referenceDay = Calendar.current.startOfDay(for: today)
         scrollPosition = indexForDate(today)
         selectedDate = today
     }
@@ -149,7 +142,7 @@ struct WheelPicker: View {
     private func indexForDate(_ date: Date) -> Int {
         let spacerNum = config.offset
         let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
+        let today = referenceDay
         let startDate = cal.startOfDay(for: cal.date(byAdding: .day, value: -config.past, to: today) ?? today)
         let target = cal.startOfDay(for: date)
         let days = cal.dateComponents([.day], from: startDate, to: target).day ?? 0
@@ -159,7 +152,7 @@ struct WheelPicker: View {
 
     private func dateForItemIndex(index: Int, spacerNum: Int) -> Date {
         let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
+        let today = referenceDay
         let startDate = cal.date(byAdding: .day, value: -config.past, to: today) ?? today
         let stepIndex = index - spacerNum
         return cal.date(byAdding: .day, value: stepIndex * max(config.steps, 1), to: startDate) ?? today
@@ -171,20 +164,18 @@ struct WheelPicker: View {
         return Int(ceil(Double(range) / Double(step))) + 1
     }
 
-    private func dateToString(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "E"
-        return formatter.string(from: date)
-    }
 }
 
 struct CalendarView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject private var calendarManager = CalendarManager.shared
+    @StateObject private var agenda = CalendarAgendaModel()
     @ObservedObject private var taskStore = TaskStore.shared
     @State private var selectedDate = Date()
     @State private var taskRefreshActive = false
     @State private var showsUndatedTodoistTasks = false
+    @Default(.hideAllDayEvents) private var hideAllDayEvents
+    @Default(.hideCompletedReminders) private var hideCompletedReminders
 
     var body: some View {
         VStack(spacing: 0) {
@@ -230,6 +221,7 @@ struct CalendarView: View {
                             )
                             .frame(width: 20)
                         }
+                        .allowsHitTesting(false)
                     }
                 }
 
@@ -251,7 +243,7 @@ struct CalendarView: View {
             let dayTasks = showsUndatedTodoistTasks
                 ? taskStore.undatedTodoistTasks
                 : taskStore.tasks(on: selectedDate)
-            if EventListView.filteredEvents(events: calendarManager.events).isEmpty
+            if EventListView.filteredEvents(events: showsUndatedTodoistTasks ? [] : agenda.events).isEmpty
                 && EventListView.filteredTasks(tasks: dayTasks).isEmpty {
                 if showsUndatedTodoistTasks {
                     Text("No undated Todoist tasks")
@@ -263,7 +255,7 @@ struct CalendarView: View {
                 Spacer(minLength: 0)
             } else {
                 EventListView(
-                    events: showsUndatedTodoistTasks ? [] : calendarManager.events,
+                    events: showsUndatedTodoistTasks ? [] : agenda.events,
                     tasks: dayTasks
                 )
             }
@@ -279,8 +271,10 @@ struct CalendarView: View {
             updateTaskRefresh(for: vm.notchState)
             selectedDate = Date.now
         }
-        .task(id: Calendar.current.startOfDay(for: selectedDate)) {
-            await calendarManager.updateCurrentDate(selectedDate)
+        .task(id: CalendarAgendaRequest(
+            day: Calendar.current.startOfDay(for: selectedDate), revision: calendarManager.revision
+        )) {
+            await agenda.load(day: selectedDate, calendarIDs: calendarManager.selectedCalendarIDs)
         }
         .onDisappear {
             if taskRefreshActive {
@@ -327,13 +321,14 @@ struct EmptyEventsView: View {
     }
 }
 
-private enum AgendaItem: Identifiable, Equatable {
+enum AgendaItem: Identifiable, Equatable {
     case event(EventModel)
     case task(TaskItem)
 
     var id: String {
         switch self {
-        case .event(let event): return "event:\(event.id)"
+        // Recurring occurrences share an EventKit item ID, but must have distinct row IDs.
+        case .event(let event): return "event:\(event.occurrenceID)"
         case .task(let task): return task.id
         }
     }
@@ -360,21 +355,28 @@ struct EventListView: View {
     let tasks: [TaskItem]
     @Default(.autoScrollToNextEvent) private var autoScrollToNextEvent
     @Default(.showFullEventTitles) private var showFullEventTitles
+    @Default(.hideAllDayEvents) private var hideAllDayEvents
+    @Default(.hideCompletedReminders) private var hideCompletedReminders
 
     static func filteredEvents(events: [EventModel]) -> [EventModel] {
-        events.filter { !($0.isAllDay && Defaults[.hideAllDayEvents]) }
+        let hideAllDay = Defaults[.hideAllDayEvents]
+        return events.filter { !($0.isAllDay && hideAllDay) }
     }
 
     static func filteredTasks(tasks: [TaskItem]) -> [TaskItem] {
-        tasks.filter { task in
-            (!task.isCompleted || !Defaults[.hideCompletedReminders])
-                && !(task.isAllDay && Defaults[.hideAllDayEvents])
+        let hideCompleted = Defaults[.hideCompletedReminders]
+        let hideAllDay = Defaults[.hideAllDayEvents]
+        return tasks.filter { task in
+            (!task.isCompleted || !hideCompleted)
+                && !(task.isAllDay && hideAllDay)
         }
     }
 
     private var filteredAgenda: [AgendaItem] {
-        let items = Self.filteredEvents(events: events).map(AgendaItem.event)
-            + Self.filteredTasks(tasks: tasks).map(AgendaItem.task)
+        let items = events.filter { !(hideAllDayEvents && $0.isAllDay) }.map(AgendaItem.event)
+            + tasks.filter {
+                !(hideCompletedReminders && $0.isCompleted) && !(hideAllDayEvents && $0.isAllDay)
+            }.map(AgendaItem.task)
         return items.sorted { lhs, rhs in
             if lhs.start != rhs.start { return lhs.start < rhs.start }
             if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
@@ -382,47 +384,41 @@ struct EventListView: View {
         }
     }
 
-    private func scrollToRelevantEvent(proxy: ScrollViewProxy) {
-        guard autoScrollToNextEvent else { return }
+    private func scrollTarget(in agenda: [AgendaItem]) -> String? {
+        guard autoScrollToNextEvent else { return nil }
         let now = Date()
-        let timedUpcoming = filteredAgenda.first { !$0.isAllDay && $0.start >= now }
-        let firstAllDay = filteredAgenda.first(where: \.isAllDay)
-        guard let target = timedUpcoming ?? firstAllDay ?? filteredAgenda.last else { return }
-
-        withTransaction(Transaction(animation: nil)) {
-            proxy.scrollTo(target.id, anchor: .top)
-        }
-    }
-
-    private var agendaTaskID: String {
-        filteredAgenda
-            .map { "\($0.id):\($0.start.timeIntervalSince1970)" }
-            .joined(separator: "|")
+        let timedUpcoming = agenda.first { !$0.isAllDay && $0.start >= now }
+        let firstAllDay = agenda.first(where: \.isAllDay)
+        return (timedUpcoming ?? firstAllDay ?? agenda.last)?.id
     }
 
     var body: some View {
+        let agenda = filteredAgenda
+        let target = scrollTarget(in: agenda)
         ScrollViewReader { proxy in
-            List {
-                ForEach(filteredAgenda) { item in
-                    agendaRow(item)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(agenda) { item in
+                        VStack(spacing: 0) {
+                            agendaRow(item)
+                                .padding(.vertical, 5)
+                                .contentShape(Rectangle())
+                            Divider().overlay(Color.gray.opacity(0.2))
+                        }
                         .id(item.id)
-                        .padding(.leading, -5)
-                        .contentShape(Rectangle())
-                        .listRowSeparator(.automatic)
-                        .listRowSeparatorTint(.gray.opacity(0.2))
-                        .listRowBackground(Color.clear)
+                    }
                 }
+                .padding(.horizontal, 5)
             }
-            .listStyle(.plain)
             .scrollIndicators(.never)
-            .scrollContentBackground(.hidden)
             .background(Color.clear)
-            .task(id: "\(autoScrollToNextEvent)-\(agendaTaskID)") {
-                // SwiftUI cancels this task when another day replaces the agenda. Yield once so
-                // List has installed the new row IDs before ScrollViewReader seeks to a target.
+            .task(id: target) {
+                // Let the new rows mount; superseded/disappearing views cancel this seek.
                 await Task.yield()
-                guard !Task.isCancelled else { return }
-                scrollToRelevantEvent(proxy: proxy)
+                guard !Task.isCancelled, let target else { return }
+                withTransaction(Transaction(animation: nil)) {
+                    proxy.scrollTo(target, anchor: .top)
+                }
             }
         }
         Spacer(minLength: 0)

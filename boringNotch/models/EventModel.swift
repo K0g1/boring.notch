@@ -67,6 +67,10 @@ extension EventType {
 }
 
 extension EventModel {
+    /// Stable identity for a particular occurrence, separate from the deep-link item ID.
+    var occurrenceID: String {
+        "\(calendar.id):\(id):\(start.timeIntervalSinceReferenceDate)"
+    }
     
     var eventStatus: EventStatus {
         if start > Date() {

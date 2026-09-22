@@ -4,6 +4,7 @@ struct FocusSessionView: View {
     @ObservedObject private var store = FocusSessionStore.shared
     @ObservedObject private var tasks = TaskStore.shared
     @ObservedObject private var calendar = CalendarManager.shared
+    @StateObject private var agenda = CalendarAgendaModel()
     @State private var mode: FocusSessionStore.Mode = .focus
     @State private var minutes = 25.0
     @State private var association: FocusSessionStore.Association?
@@ -57,7 +58,7 @@ struct FocusSessionView: View {
                             }
                         }
                         Section("Calendar events") {
-                            ForEach(calendar.events.filter { $0.type.isEvent }) { event in
+                            ForEach(agenda.events.filter { $0.type.isEvent }, id: \.occurrenceID) { event in
                                 Button(event.title) { association = .init(id: "event:" + event.id, title: event.title) }
                             }
                         }
@@ -73,6 +74,9 @@ struct FocusSessionView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .task(id: calendar.revision) {
+            await agenda.load(day: Date(), calendarIDs: calendar.selectedCalendarIDs)
+        }
     }
 }
 

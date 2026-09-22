@@ -1,176 +1,116 @@
-//
-//  CalendarManager.swift
-//  boringNotch
-//
-//  Created by Harsh Vardhan  Goswami  on 08/09/24.
-//
-
 import Defaults
 import EventKit
 import SwiftUI
 
-// MARK: - CalendarManager
-
+/// Shared calendar metadata and selection. Each agenda owns its own day and results.
 @MainActor
-class CalendarManager: ObservableObject {
+final class CalendarManager: ObservableObject {
     static let shared = CalendarManager()
 
-    @Published var currentWeekStartDate: Date
-    @Published var events: [EventModel] = []
-    @Published var allCalendars: [CalendarModel] = []
-    @Published var eventCalendars: [CalendarModel] = []
-    @Published var calendarAuthorizationStatus: EKAuthorizationStatus = .notDetermined
-    private var selectedCalendars: [CalendarModel] = []
-    private let calendarService = CalendarService()
-
+    @Published private(set) var eventCalendars: [CalendarModel] = []
+    @Published private(set) var calendarAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
+    @Published private(set) var revision = 0
+    private let calendarService: any CalendarServiceProviding
     private var eventStoreChangedObserver: NSObjectProtocol?
-    private var eventRequestTask: Task<[EventModel], Never>?
-    private var eventRequestGeneration = 0
+    private var reloadTask: Task<Void, Never>?
 
-    private init() {
-        self.currentWeekStartDate = CalendarManager.startOfDay(Date())
-        setupEventStoreChangedObserver()
-        Task {
-            await reloadCalendarAndReminderLists()
+    var selectedCalendarIDs: [String] {
+        eventCalendars.filter(getCalendarSelected).map(\.id)
+    }
+
+    init(calendarService: any CalendarServiceProviding = CalendarService.shared, observeChanges: Bool = true) {
+        self.calendarService = calendarService
+        if observeChanges {
+            eventStoreChangedObserver = NotificationCenter.default.addObserver(
+                forName: .EKEventStoreChanged, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.scheduleReload() }
+            }
+            scheduleReload()
         }
     }
 
     deinit {
-        eventRequestTask?.cancel()
-        if let observer = eventStoreChangedObserver {
-            NotificationCenter.default.removeObserver(observer)
+        reloadTask?.cancel()
+        if let eventStoreChangedObserver {
+            NotificationCenter.default.removeObserver(eventStoreChangedObserver)
         }
     }
 
-    private func setupEventStoreChangedObserver() {
-        eventStoreChangedObserver = NotificationCenter.default.addObserver(
-            forName: .EKEventStoreChanged,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task {
-                await self?.reloadCalendarAndReminderLists()
-            }
+    private func scheduleReload() {
+        reloadTask?.cancel()
+        reloadTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+            await self?.reloadCalendarAndReminderLists()
         }
     }
 
-    @MainActor
     func reloadCalendarAndReminderLists() async {
-        let all = await calendarService.calendars()
-        self.eventCalendars = all
-        self.allCalendars = all
-        updateSelectedCalendars()
+        let calendars = await calendarService.calendars()
+        guard !Task.isCancelled else { return }
+        calendarAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
+        if eventCalendars != calendars { eventCalendars = calendars }
+        // An event can change without its calendar changing. Visible agendas must reload too.
+        revision &+= 1
     }
 
     func checkCalendarAuthorization() async {
-        let status = EKEventStore.authorizationStatus(for: .event)
-        DispatchQueue.main.async {
-            print("📅 Current calendar authorization status: \(status)")
-            self.calendarAuthorizationStatus = status
+        calendarAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
+        if calendarAuthorizationStatus == .notDetermined {
+            _ = try? await calendarService.requestAccess(to: .event)
         }
-
-        switch status {
-        case .notDetermined:
-            guard let granted = try? await calendarService.requestAccess(to: .event) else {
-                self.calendarAuthorizationStatus = .notDetermined
-                return
-            }
-            self.calendarAuthorizationStatus = granted ? .fullAccess : .denied
-            if granted {
-                await reloadCalendarAndReminderLists()
-                await updateEvents()
-            }
-        case .restricted, .denied:
-            NSLog("Calendar access denied or restricted")
-        case .fullAccess:
-            NSLog("Full access")
-            await reloadCalendarAndReminderLists()
-            await updateEvents()
-        case .writeOnly:
-            NSLog("Write only")
-        @unknown default:
-            print("Unknown authorization status")
-        }
-    }
-    
-    func updateSelectedCalendars() {
-        selectedCalendars = allCalendars.filter { getCalendarSelected($0) }
+        await reloadCalendarAndReminderLists()
     }
 
     func getCalendarSelected(_ calendar: CalendarModel) -> Bool {
         switch Defaults[.calendarSelectionState] {
-        case .all:
-            return true
-        case .selected(let identifiers):
-            return identifiers.contains(calendar.id)
+        case .all: return true
+        case .selected(let identifiers): return identifiers.contains(calendar.id)
         }
     }
 
     func setCalendarSelected(_ calendar: CalendarModel, isSelected: Bool) async {
-        var selectionState = Defaults[.calendarSelectionState]
+        var identifiers = Set(selectedCalendarIDs)
+        if isSelected { identifiers.insert(calendar.id) } else { identifiers.remove(calendar.id) }
+        Defaults[.calendarSelectionState] = identifiers == Set(eventCalendars.map(\.id))
+            ? .all : .selected(identifiers)
+        revision &+= 1
+    }
+}
 
-        switch selectionState {
-        case .all:
-            if !isSelected {
-                let identifiers = Set(allCalendars.map { $0.id }).subtracting([calendar.id])
-                selectionState = .selected(identifiers)
-            }
+struct CalendarAgendaRequest: Hashable {
+    let day: Date
+    let revision: Int
+}
 
-        case .selected(var identifiers):
-            if isSelected {
-                identifiers.insert(calendar.id)
-            } else {
-                identifiers.remove(calendar.id)
-            }
+/// Owned by a visible agenda, not the singleton: different displays may show different days.
+@MainActor
+final class CalendarAgendaModel: ObservableObject {
+    @Published private(set) var events: [EventModel] = []
+    private let service: any CalendarServiceProviding
+    private var generation = 0
+    private var displayedDay: Date?
 
-            selectionState =
-                identifiers.isEmpty
-                ? .all : identifiers.count == allCalendars.count ? .all : .selected(identifiers)  // if empty, select all
+    init(service: any CalendarServiceProviding = CalendarService.shared) {
+        self.service = service
+    }
+
+    func load(day: Date, calendarIDs: [String]) async {
+        guard !Task.isCancelled else { return }
+        generation &+= 1
+        let requestGeneration = generation
+        let day = Calendar.current.startOfDay(for: day)
+        if displayedDay != day || calendarIDs.isEmpty {
+            if !events.isEmpty { events = [] }
+            displayedDay = day
         }
-
-        Defaults[.calendarSelectionState] = selectionState
-        updateSelectedCalendars()
-        await updateEvents()
+        guard !calendarIDs.isEmpty else { return }
+        // The view's task is cancelled on date/selection changes and on disappearance.
+        do { try await Task.sleep(for: .milliseconds(120)) } catch { return }
+        guard requestGeneration == generation, !Task.isCancelled,
+              let end = Calendar.current.date(byAdding: .day, value: 1, to: day) else { return }
+        let result = await service.events(from: day, to: end, calendars: calendarIDs)
+        guard requestGeneration == generation, !Task.isCancelled else { return }
+        if events != result { events = result }
     }
-
-    static func startOfDay(_ date: Date) -> Date {
-        return Calendar.current.startOfDay(for: date)
-    }
-
-    func updateCurrentDate(_ date: Date) async {
-        let day = Calendar.current.startOfDay(for: date)
-        currentWeekStartDate = day
-
-        // A trackpad can report several settled positions while the wheel is coming to rest.
-        // Cancel the previous request and only publish the result for the newest day. This keeps
-        // EventKit work from racing back onto the main actor with stale data.
-        eventRequestGeneration &+= 1
-        let generation = eventRequestGeneration
-        eventRequestTask?.cancel()
-
-        // Let the wheel settle before touching EventKit. This collapses a fast swipe into one
-        // request without delaying ordinary button/keyboard date changes in a noticeable way.
-        do {
-            try await Task.sleep(for: .milliseconds(120))
-        } catch {
-            return
-        }
-        guard generation == eventRequestGeneration else { return }
-
-        let calendarIDs = selectedCalendars.map { $0.id }
-        let end = Calendar.current.date(byAdding: .day, value: 1, to: day) ?? day
-        let request = Task { [calendarService] in
-            await calendarService.events(from: day, to: end, calendars: calendarIDs)
-        }
-        eventRequestTask = request
-
-        let eventsResult = await request.value
-        guard !request.isCancelled, generation == eventRequestGeneration else { return }
-        events = eventsResult
-    }
-
-    private func updateEvents() async {
-        await updateCurrentDate(currentWeekStartDate)
-    }
-    
 }
